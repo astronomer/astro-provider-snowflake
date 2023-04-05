@@ -9,7 +9,7 @@ description = "Scalable and Secure Snowflake Workflows in Apache Airflow"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.7"
-packages = [{include = "astro_snowflake", from = "src"}]
+packages = [{include = "astronomer.providers.snowflake", from = "provider"}]
 
 authors = [
     { name = "Astronomer", email = "humans@astronomer.io" },
@@ -71,7 +71,7 @@ Homepage = "https://github.com/astronomer/astro-provider-snowflake/"
 Documentation = "https://github.com/astronomer/astro-provider-snowflake/"
 
 [tool.hatch.version]
-path = "src/astro_snowflake/__init__.py"
+path = "provider/astronomer/providers/snowflake/__init__.py"
 
 [tool.hatch.envs.test]
 dependencies = [
@@ -90,11 +90,11 @@ build = "sphinx-build -b html docs docs/_build"
 serve = "sphinx-autobuild docs docs/_build"
 
 [tool.hatch.build]
-sources = ["src"]
+sources = ["provider"]
 
 [tool.hatch.build.targets.wheel]
 include = [
-  "/src/astro_snowflake",
+  "/provider/astronomer/providers/snowflake",
 ]
 
 [tool.mypy]
@@ -111,7 +111,7 @@ fix = true
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "--cov=src --cov-branch --cov-report term-missing"
+addopts = "--cov=provider --cov-branch --cov-report term-missing"
 testpaths = [
     "tests",
 ]
