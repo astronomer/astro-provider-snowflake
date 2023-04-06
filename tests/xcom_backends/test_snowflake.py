@@ -10,11 +10,11 @@ from airflow.models.dataset import Dataset
 
 os.environ['AIRFLOW__CORE__XCOM_SNOWFLAKE_CONN_NAME']='snowflake_default'
 os.environ['AIRFLOW__CORE__XCOM_SNOWFLAKE_TABLE']='SANDBOX.AIRFLOW_XCOM.XCOM_TABLE' 
-os.environ['AIRFLOW__CORE__XCOM_BACKEND']='astro_snowflake.xcom_backends.snowflake.SnowflakeXComBackend'
+os.environ['AIRFLOW__CORE__XCOM_BACKEND']='astronomer.providers.snowflake.xcom_backends.snowflake.SnowflakeXComBackend'
 os.environ['AIRFLOW__CORE__XCOM_SNOWFLAKE_STAGE']='SANDBOX.AIRFLOW_XCOM.XCOM_STAGE' 
 
 
-#from astro_snowflake.xcom_backends.snowflake import SnowflakeXComBackend
+#from astronomer.providers.snowflake.xcom_backends.snowflake import SnowflakeXComBackend
 self = SnowflakeXComBackend()
 
 dag_id='test_dag_id'

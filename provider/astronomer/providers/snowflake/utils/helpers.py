@@ -8,6 +8,13 @@ _default_runner_endpoint_name = 'airflow-runner'
 _default_runner_port = 8001
 _default_runner_image_uri = 'mpgregor/snowservices-runner:latest'
 
+#'AIRFLOW_CONN_SNOWFLAKE_XCOM': 'snowflake://<USER_NAME>:<PASSWORD>@/<SCHEMA_NAME>?account=<ACCOUNT_NAME>&region=<REGION_NAME>&database=<DATABASE_NAME>&warehouse=<WAREHOUSE_NAME>&role=<ROLE_NAME>',
+#'AIRFLOW__CORE__XCOM_BACKEND': 'astronomer.providers.snowflake.xcom_backends.snowflake.SnowflakeXComBackend',
+#'AIRFLOW__CORE__XCOM_SNOWFLAKE_TABLE': 'AIRFLOW_XCOM.PUBLIC.XCOM_TABLE',
+#'AIRFLOW__CORE__XCOM_SNOWFLAKE_STAGE': 'AIRFLOW_XCOM.PUBLIC.XCOM_STAGE',
+#'AIRFLOW__CORE__XCOM_SNOWFLAKE_CONN_NAME': 'snowflake_xcom'
+
+
 def create_runner_spec(
     service_name:str, 
     runner_image: str,
@@ -15,7 +22,7 @@ def create_runner_spec(
     runner_endpoint_name:str = None,
     local_test:str | None = None
     ):
-
+    
     if runner_port and not isinstance(runner_port, int):
         raise AttributeError('runner_port must be an integer.')
     
@@ -27,15 +34,15 @@ def create_runner_spec(
                 service_name: 
                 {
                     'image': runner_image, 
-                    'command': ["gunicorn", "api:app", "--bind", f"0.0.0.0:{runner_port}", "-w", "6", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "0"],
+                    'command': ["python3.9", "-m", "gunicorn", "api:app", "--bind", f"0.0.0.0:{runner_port}", "-w", "6", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "0"],
                     'ports': [f'{runner_port}:{runner_port}'], 
-                    'environment': [
-                        'AIRFLOW__CORE__LOAD_EXAMPLES:False',
-                        'AIRFLOW__CORE__ENABLE_XCOM_PICKLING:True',
-                        'PYTHONUNBUFFERED:1',
-                        'AIRFLOW__CORE__XCOM_BACKEND:astro_snowflake.xcom_backends.localfile.LocalFileXComBackend',
-                        'AIRFLOW__CORE__XCOM_LOCALFILE_DIR:/xcom',
-                    ]
+                    'environment': {
+                        'AIRFLOW__CORE__LOAD_EXAMPLES': 'False',
+                        'AIRFLOW__CORE__ENABLE_XCOM_PICKLING': 'True',
+                        'PYTHONUNBUFFERED': 1,
+                        'AIRFLOW__CORE__XCOM_BACKEND':'astronomer.providers.snowflake.xcom_backends.localfile.LocalFileXComBackend',
+                        'AIRFLOW__CORE__XCOM_LOCALFILE_DIR':'/tmp',
+                    }
                     # 'volumes': [f'{os.getcwd()}/include/xcom:/xcom'], 
                 }
             }
@@ -49,14 +56,14 @@ def create_runner_spec(
                 {
                     'name': service_name, 
                     'image': runner_image,
-                    'command': ["gunicorn", "api:app", "--bind", f"0.0.0.0:{runner_port}", "-w", "6", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "0"],
-                    'env': [
-                        'AIRFLOW__CORE__LOAD_EXAMPLES:False',
-                        'AIRFLOW__CORE__ENABLE_XCOM_PICKLING:True',
-                        'PYTHONUNBUFFERED:1',
-                        'AIRFLOW__CORE__XCOM_BACKEND:astro_snowflake.xcom_backends.localfile.LocalFileXComBackend',
-                        'AIRFLOW__CORE__XCOM_LOCALFILE_DIR:/xcom',
-                    ]
+                    'command': ["python3.9", "-m", "gunicorn", "api:app", "--bind", f"0.0.0.0:{runner_port}", "-w", "6", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "0"],
+                    'env': {
+                        'AIRFLOW__CORE__XCOM_BACKEND': 'astronomer.providers.snowflake.xcom_backends.localfile.LocalFileXComBackend',
+                        'AIRFLOW__CORE__XCOM_LOCALFILE_DIR': '/tmp',
+                        'AIRFLOW__CORE__LOAD_EXAMPLES': 'False',
+                        'AIRFLOW__CORE__ENABLE_XCOM_PICKLING': 'True',
+                        'PYTHONUNBUFFERED': 1,
+                    }
                 }
             ],
             # 'volume': 
@@ -64,11 +71,11 @@ def create_runner_spec(
             #     # {'name': 'xcom', 'source': 'local'},  
             # ]
             'endpoint': 
-                [
-                    {
-                        'name': service_name if not runner_endpoint_name else runner_endpoint_name, 
-                        'port': runner_port, 
-                    },    
+            [
+                {
+                    'name': service_name if not runner_endpoint_name else runner_endpoint_name, 
+                    'port': runner_port, 
+                },    
             ]
         }
     }

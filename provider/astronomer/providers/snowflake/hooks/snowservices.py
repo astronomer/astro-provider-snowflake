@@ -9,10 +9,10 @@ import yaml
 from uuid import uuid4
 
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
-from astro_snowflake.utils.helpers import SnowService
+from astronomer.providers.snowflake.utils.helpers import SnowService
 
 try:
-    from astro_snowflake.utils.astro_cli_docker_helpers import (
+    from astronomer.providers.snowflake.utils.astro_cli_docker_helpers import (
         docker_compose_up, 
         docker_compose_ps,
         docker_compose_kill,

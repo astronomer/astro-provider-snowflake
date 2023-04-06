@@ -16,7 +16,7 @@ class LocalFileXComBackend(BaseXCom):
     are stored as json text files.  Pandas dataframes are stored as parquet files.
     Requires a specified xcom directory.
     Enable with these env variables:
-        AIRFLOW__CORE__XCOM_BACKEND=astro_snowflake.xcom_backends.localfile.LocalFileXComBackend
+        AIRFLOW__CORE__XCOM_BACKEND=astronomer.providers.snowflake.xcom_backends.localfile.LocalFileXComBackend
         AIRFLOW__CORE__XCOM_LOCALFILE_DIR=<local directory name>
     """
     @staticmethod

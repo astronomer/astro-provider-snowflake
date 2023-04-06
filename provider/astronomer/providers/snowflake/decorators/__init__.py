@@ -1,1 +1,1 @@
-from .snowflake import snowservices_python as snowservices_python
+from .snowservices import snowservices_python as snowservices_python

@@ -2,9 +2,9 @@ from pendulum import datetime
 
 from airflow.decorators import dag, task
 
-from astro_snowflake.operators.snowflake import SnowServicesPythonOperator
-from astro_snowflake.decorators.snowflake import snowservices_python
-from astro_snowflake.hooks.snowflake import SnowServicesHook
+from astronomer.providers.snowflake.operators.snowservices import SnowServicesPythonOperator
+from astronomer.providers.snowflake.decorators.snowservices import snowservices_python
+from astronomer.providers.snowflake.hooks.snowservices import SnowServicesHook
 
 
 @dag(

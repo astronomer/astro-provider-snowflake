@@ -71,7 +71,7 @@ class SnowflakeXComBackend(BaseXCom):
     are stored as tables.  Dataframes (pandas and Snowpark) are stored as parquet files in a stage.
     Requires a specified xcom directory.
     Enable with these env variables:
-        AIRFLOW__CORE__XCOM_BACKEND=astro_snowflake.xcom_backends.snowflake.SnowflakeXComBackend
+        AIRFLOW__CORE__XCOM_BACKEND=astronomer.providers.snowflake.xcom_backends.snowflake.SnowflakeXComBackend
         AIRFLOW__CORE__XCOM_SNOWFLAKE_TABLE=<DB.SCHEMA.TABLE>
         AIRFLOW__CORE__XCOM_SNOWFLAKE_STAGE=<DB.SCHEMA.STAGE>
         AIRFLOW__CORE__XCOM_SNOWFLAKE_CONN_NAME=<CONN_NAME> ie. 'snowflake_default'

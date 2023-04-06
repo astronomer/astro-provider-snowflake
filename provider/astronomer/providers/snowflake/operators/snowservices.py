@@ -11,7 +11,7 @@ from airflow.exceptions import AirflowException
 from airflow.operators.python import _BasePythonVirtualenvOperator
 from airflow.utils.context import Context, context_copy_partial
 
-from astro_snowflake.hooks.snowflake import SnowServicesHook
+from astronomer.providers.snowflake.hooks.snowservices import SnowServicesHook
 
 if TYPE_CHECKING:
     from airflow.utils.context import Context
