@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 import numpy as np
 from ast import literal_eval
-import warnings
 
 from airflow.models.xcom import BaseXCom
 if TYPE_CHECKING:
@@ -246,18 +245,18 @@ class SnowflakeXComBackend(BaseXCom):
                 value_type = 'json'
                 
                 if isinstance(value, dict) and set(map(type, value)) != {str}:
-                        warnings.warn('Non-string-type keys found in dict. Resorting to file serialization to stage.')
+                        print('Non-string-type keys found in dict. Resorting to file serialization to stage.')
                         json_serializable = False
 
             except Exception as e:
                 if isinstance(e, TypeError) and 'not JSON serializable' in e.args[0]:
-                    warnings.warn('Attempting to serialize XCOM value but it is not JSON serializable.  Resorting to file serialization to stage.')
+                    print('Attempting to serialize XCOM value but it is not JSON serializable.  Resorting to file serialization to stage.')
                     json_serializable = False
                 else:
                     raise e()
 
         if 'json_str' in locals() and len(json_str.encode(_ENCODING)) > _SNOWFLAKE_VARIANT_SIZE_LIMIT:
-            warnings.warn(f'XCOM value size exceeds Snowflake cell size limit {_SNOWFLAKE_VARIANT_SIZE_LIMIT}. Resorting to file serialization to stage.')
+            print(f'XCOM value size exceeds Snowflake cell size limit {_SNOWFLAKE_VARIANT_SIZE_LIMIT}. Resorting to file serialization to stage.')
             json_serializable = False
                     
         if json_serializable:
