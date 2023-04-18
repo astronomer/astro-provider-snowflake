@@ -1,0 +1,9 @@
+version: '3.1'
+services:
+  scheduler:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  
+    volumes:
+      - ${PWD}/../provider/astronomer/providers/snowflake:/usr/local/lib/python3.9/site-packages/astronomer/providers/snowflake
+      - ${PWD}/../provider/astronomer/providers/snowflake:/usr/local/lib/python3.8/site-packages/astronomer/providers/snowflake
+  
