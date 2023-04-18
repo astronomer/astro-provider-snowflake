@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing_extensions import Any
 import sys
 from textwrap import dedent
 import inspect
@@ -28,6 +29,33 @@ except ImportError:
 _SUPPORTED_SNOWPARK_PYTHON_VERSIONS = ['3.8']
 
 
+def get_snowflake_conn_params(operator:Any) -> dict:
+    #Resolves connection parameters.
+    #Conn params may come from the hook or set in the operator/decorator.
+    #Some params (ie. warehouse, database, schema, etc) can be None as these are set in Snowflake defaults.
+    #Some regions (ie. us-west-2) do not except a region param.  Account must be fully qualified instead.
+    #SnowparkTable class can also override this in get_fq_table_name()
+
+    #Start with params that come with the Snowflake hook
+    conn_params = SnowflakeHook(snowflake_conn_id=operator.snowflake_conn_id)._get_conn_params()
+
+    #replace with any that come from the operator at runtime
+    if operator.warehouse:
+        conn_params['warehouse'] = operator.warehouse
+    if operator.database:
+        conn_params['database'] = operator.database
+    if operator.schema:
+        conn_params['schema'] = operator.schema
+    if operator.role:
+        conn_params['role'] = operator.role
+    if operator.authenticator:
+        conn_params['authenticator'] = operator.authenticator
+    if operator.session_parameters:
+        conn_params['session_parameters'] = operator.session_parameters
+
+    return conn_params
+
+
 #TODO: don't really have a way to test this now until snowpark supports 3.9
 class SnowparkPythonOperator(PythonOperator):
     """
@@ -38,9 +66,8 @@ class SnowparkPythonOperator(PythonOperator):
     Snowpark.  If not consider using a virtualenv and the SnowparkVirtualenvOperator or 
     SnowparkExternalPythonOperator instead.
 
-    :param snowflake_conn_id: Reference to
+    :param snowflake_conn_id or conn_id: Reference to
         :ref:`Snowflake connection id<howto/connection:snowflake>`
-    :param parameters: (optional) the parameters to render the SQL query with.
     :param warehouse: name of warehouse (will overwrite any warehouse defined in the connection's extra JSON)
     :param database: name of database (will overwrite database defined in connection)
     :param schema: name of schema (will overwrite schema defined in connection)
@@ -65,8 +92,8 @@ class SnowparkPythonOperator(PythonOperator):
     def __init__(
         self,
         *,
-        snowflake_conn_id: str = "snowflake_default",
-        parameters: dict | None = None,
+        snowflake_conn_id: str = None,
+        conn_id: str = None,
         warehouse: str | None = None,
         database: str | None = None,
         role: str | None = None,
@@ -88,8 +115,7 @@ class SnowparkPythonOperator(PythonOperator):
         if SnowparkSession is None:
             raise AirflowException("The snowflake-snowpark-python package is not installed.")
 
-        self.snowflake_conn_id = snowflake_conn_id
-        self.parameters = parameters
+        self.snowflake_conn_id = snowflake_conn_id or conn_id or "snowflake_default"
         self.warehouse = warehouse
         self.database = database
         self.role = role
@@ -113,17 +139,9 @@ class SnowparkPythonOperator(PythonOperator):
         )
     
     def execute_callable(self):
-        hook = SnowflakeHook(
-            snowflake_conn_id=self.snowflake_conn_id,
-            parameters=self.parameters,
-            warehouse=self.warehouse,
-            database=self.database,
-            role=self.role,
-            schema=self.schema,
-            authenticator=self.authenticator,
-            session_parameters=self.session_parameters,
-        )
-        snowpark_session = SnowparkSession.builder.configs(hook._get_conn_params()).create()
+
+        conn_params = get_snowflake_conn_params(self)
+        snowpark_session = SnowparkSession.builder.configs(conn_params).create()
 
         try:
             op_kwargs = dict(self.op_kwargs)
@@ -142,7 +160,7 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
     This is required when calling the function from a subprocess since we can't pass the non-serializable
     snowpark session or table objects as args.
 
-    :param conn_id: A Snowflake connection name.  Default 'snowflake_default'
+    :param snowflake_conn_id or conn_id: A Snowflake connection name.  Default 'snowflake_default'
     :param python_callable: A python function with no references to outside variables,
         defined with def, which will be run in a virtualenv
     :param use_dill: Whether to use dill to serialize
@@ -168,7 +186,14 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         self,
         *,
         python_callable: Callable,
-        conn_id: str | None = 'snowflake_default',
+        snowflake_conn_id: str = None,
+        conn_id: str = None,
+        warehouse: str | None = None,
+        database: str | None = None,
+        role: str | None = None,
+        schema: str | None = None,
+        authenticator: str | None = None,
+        session_parameters: dict | None = None,
         use_dill: bool = False,
         op_args: Collection[Any] | None = None,
         op_kwargs: Mapping[str, Any] | None = None,
@@ -179,7 +204,13 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         **kwargs,
     ):
         
-        self.conn_id = conn_id
+        self.snowflake_conn_id = snowflake_conn_id or conn_id or "snowflake_default"
+        self.warehouse = warehouse
+        self.database = database
+        self.role = role
+        self.schema = schema
+        self.authenticator = authenticator
+        self.session_parameters = session_parameters
 
         super().__init__(
             python_callable=python_callable,
@@ -217,10 +248,7 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
     def get_python_source(self):
         """Return the source of self.python_callable prepended with the Snowpark session creation."""
 
-        hook:SnowflakeHook = SnowflakeHook(conn_id=self.conn_id)
-        conn_params:dict = hook._get_conn_params()
-        database:str | None = hook.database or conn_params['database']
-        schema:str | None = hook.schema or conn_params['schema']
+        conn_params = get_snowflake_conn_params(self)
 
         python_callable:list = dedent(inspect.getsource(self.python_callable)).split('\n')
 
@@ -233,7 +261,7 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
 
         #create a snowpark session called 'snowpark_session'
         prepended_callable.append(f'{match_indent}from snowflake.snowpark import Session as SnowparkSession\n')
-        prepended_callable.append(f'{match_indent}snowpark_session = SnowparkSession.builder.configs({hook._get_conn_params()}).create()\n')
+        prepended_callable.append(f'{match_indent}snowpark_session = SnowparkSession.builder.configs({conn_params}).create()\n')
 
         #create a dict of SnowparkTable type args in order to auto instantiate Snowpark Dataframes for the user
         full_spec = inspect.getfullargspec(self.python_callable)
@@ -250,7 +278,9 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
                 AirflowException('op_arg count does not match function arg count.')
 
             if full_spec.annotations.get(current_arg) == SnowparkTable:
-                fq_table_name = self.get_fq_table_name(table=op_arg, database=database, schema=schema)
+                fq_table_name = self.get_fq_table_name(table=op_arg, 
+                                                       database=op_arg.metadata.database, 
+                                                       schema=op_arg.metadata.schema)
                 snowpark_table_args[current_arg]=fq_table_name
 
         #If there are any function args not yet consumed check for kwargs
@@ -263,7 +293,9 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
                     if param_types.get(k).annotation == SnowparkTable:
                         full_spec.args.remove(k)
                         
-                        fq_table_name = self.get_fq_table_name(table=v, database=database, schema=schema)
+                        fq_table_name = self.get_fq_table_name(table=v, 
+                                                               database=conn_params['database'], 
+                                                               schema=conn_params['schema'])
 
                         #If args are specified both in position and keyword, the keyword takes precedence.
                         snowpark_table_args[k]=fq_table_name
@@ -275,6 +307,8 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         #add the remaining lines of the python_callable
         for line in python_callable:
             prepended_callable.append(f'{line}\n')
+        
+        prepended_callable.append(f'{match_indent}snowpark_session.close()\n')
 
         return ''.join(prepended_callable)
     
@@ -304,7 +338,7 @@ class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
         :ref:`howto/operator:PythonVirtualenvOperator`
-    :param conn_id: A Snowflake connection name.  Default 'snowflake_default'
+    :param snowflake_conn_id or conn_id: A Snowflake connection name.  Default 'snowflake_default'
     :param python_callable: A python function with no references to outside variables,
         defined with def, which will be run in a virtualenv
     :param requirements: Either a list of requirement strings, or a (templated)
@@ -341,7 +375,8 @@ class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator
         self,
         *,
         python_callable: Callable,
-        conn_id: str | None = 'snowflake_default',
+        snowflake_conn_id: str = None,
+        conn_id: str = None,
         requirements: None | Iterable[str] | str = None,
         python_version: str | int | float | None = None,
         use_dill: bool = False,
@@ -361,7 +396,7 @@ class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator
                 f"not in supported versions: {_SUPPORTED_SNOWPARK_PYTHON_VERSIONS} "
                 )
         
-        self.conn_id = conn_id
+        self.snowflake_conn_id = snowflake_conn_id or conn_id or "snowflake_default"
 
         super().__init__(
             python_callable=python_callable,
@@ -405,7 +440,7 @@ class SnowparkExternalPythonOperator(ExternalPythonOperator, _BaseSnowparkOperat
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
         :ref:`howto/operator:ExternalPythonOperator`
-    :param conn_id: A Snowflake connection name.  Default 'snowflake_default'
+    :param snowflake_conn_id or conn_id: A Snowflake connection name.  Default 'snowflake_default'
     :param python_callable: A python function with no references to outside variables,
         defined with def, which will be run in a virtualenv
     :param python: Full path string (file-system specific) that points to a Python binary inside
@@ -437,7 +472,8 @@ class SnowparkExternalPythonOperator(ExternalPythonOperator, _BaseSnowparkOperat
         *,
         python_callable: Callable,
         python: str,
-        conn_id: str | None = 'snowflake_default',
+        snowflake_conn_id: str = None,
+        conn_id: str = None,
         use_dill: bool = False,
         op_args: Collection[Any] | None = None,
         op_kwargs: Mapping[str, Any] | None = None,
@@ -449,7 +485,7 @@ class SnowparkExternalPythonOperator(ExternalPythonOperator, _BaseSnowparkOperat
         **kwargs,
     ):
         
-        self.conn_id = conn_id
+        self.snowflake_conn_id = snowflake_conn_id or conn_id or "snowflake_default"
 
         super().__init__(
             python_callable=python_callable,
