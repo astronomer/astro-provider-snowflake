@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import inspect
-from textwrap import dedent
 from typing import Callable, Sequence
 
 from airflow.decorators.base import DecoratedOperator, TaskDecorator, task_decorator_factory
-# from airflow.utils.decorators import remove_task_decorator
 
 from astronomer.providers.snowflake.operators.snowpark import (
     SnowparkVirtualenvOperator, 
@@ -17,10 +14,7 @@ class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator
     """
     Wraps a Python callable and captures args/kwargs when called for execution.
 
-    :param python_callable: A reference to an object that is callable
-    :param snowflake_conn_id: Reference to
-        :ref:`Snowflake connection id<howto/connection:snowflake>`
-    :param parameters: (optional) the parameters to render the SQL query with.
+    :param snowflake_conn_id or conn_id: A Snowflake connection name.  Default 'snowflake_default'
     :param warehouse: name of warehouse (will overwrite any warehouse defined in the connection's extra JSON)
     :param database: name of database (will overwrite database defined in connection)
     :param schema: name of schema (will overwrite schema defined in connection)
@@ -33,48 +27,30 @@ class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator
         'https://<your_okta_account_name>.okta.com' to authenticate
         through native Okta.
     :param session_parameters: You can set session-level parameters at the time you connect to Snowflake
+    :param python_callable: A reference to an object that is callable
+    :param op_kwargs: a dictionary of keyword arguments that will get unpacked
+        in your function (templated)
     :param op_args: a list of positional arguments that will get unpacked when
         calling your callable (templated)
-    :param op_kwargs: a dictionary of keyword arguments that will get unpacked in your function (templated)
-    :param multiple_outputs: if set, function return value will be
-        unrolled to multiple XCom values. Dict will unroll to xcom values with keys as keys.
-        Defaults to False.
+    :param multiple_outputs: If set to True, the decorated function's return value will be unrolled to
+        multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys. Defaults to False.
     """
 
-    custom_operator_name = "@task.snowpark_python"
+    template_fields: Sequence[str] = ("templates_dict", "op_args", "op_kwargs")
+    template_fields_renderers = {"templates_dict": "json", "op_args": "py", "op_kwargs": "py"}
 
-    template_fields: Sequence[str] = ("op_args", "op_kwargs")
-    template_fields_renderers = {"op_args": "py", "op_kwargs": "py"}
+    custom_operator_name: str = "@task.snowpark_python"
 
-    # since we won't mutate the arguments, we should just do the shallow copy
-    # there are some cases we can't deepcopy the objects (e.g protobuf).
-    shallow_copy_attrs: Sequence[str] = ("python_callable",)
-
-    def __init__(
-        self,
-        *,
-        snowflake_conn_id: str = "snowflake_default",
-        parameters: dict | None = None,
-        warehouse: str | None = None,
-        database: str | None = None,
-        role: str | None = None,
-        schema: str | None = None,
-        authenticator: str | None = None,
-        session_parameters: dict | None = None,
-        python_callable,
-        op_args,
-        op_kwargs: dict,
-        **kwargs,
-    ) -> None:
-        self.snowflake_conn_id = snowflake_conn_id
-        self.parameters = parameters
-        self.warehouse = warehouse
-        self.database = database
-        self.role = role
-        self.schema = schema
-        self.authenticator = authenticator
-        self.session_parameters = session_parameters
-
+    def __init__(self, 
+                 *, 
+                 snowflake_conn_id: str | None = None,
+                 conn_id: str | None = None,
+                 python_callable, 
+                 op_args, 
+                 op_kwargs, 
+                 **kwargs
+            ) -> None:
+        
         kwargs_to_upstream = {
             "python_callable": python_callable,
             "op_args": op_args,
@@ -82,6 +58,7 @@ class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator
         }
         super().__init__(
             kwargs_to_upstream=kwargs_to_upstream,
+            snowflake_conn_id= snowflake_conn_id or conn_id or 'snowflake_default',
             python_callable=python_callable,
             op_args=op_args,
             op_kwargs=op_kwargs,
@@ -89,33 +66,34 @@ class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator
         )
 
 
-def snowpark_python(
+def snowpark_python_task(
     python_callable: Callable | None = None,
     multiple_outputs: bool | None = None,
+    snowflake_conn_id: str | None = None,
     **kwargs,
 ) -> TaskDecorator:
     """Wraps a function into an Airflow operator.
+
     Accepts kwargs for operator kwarg. Can be reused in a single DAG.
+
     :param python_callable: Function to decorate
     :param multiple_outputs: If set to True, the decorated function's return value will be unrolled to
         multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys. Defaults to False.
     """
     return task_decorator_factory(
         python_callable=python_callable,
+        snowflake_conn_id=snowflake_conn_id,
         multiple_outputs=multiple_outputs,
         decorated_operator_class=_SnowparkPythonDecoratedOperator,
         **kwargs,
     )
 
 
-class _SnowparkPythonVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirtualenvOperator):
+class _SnowparkVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirtualenvOperator):
     """
     Wraps a Python callable and captures args/kwargs when called for execution.
-
     :param python_callable: A reference to an object that is callable
-    :param snowflake_conn_id: Reference to
-        :ref:`Snowflake connection id<howto/connection:snowflake>`
-    :param parameters: (optional) the parameters to render the SQL query with.
+    :param snowflake_conn_id or conn_id: A Snowflake connection name.  Default 'snowflake_default'
     :param warehouse: name of warehouse (will overwrite any warehouse defined in the connection's extra JSON)
     :param database: name of database (will overwrite database defined in connection)
     :param schema: name of schema (will overwrite schema defined in connection)
@@ -128,47 +106,26 @@ class _SnowparkPythonVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirt
         'https://<your_okta_account_name>.okta.com' to authenticate
         through native Okta.
     :param session_parameters: You can set session-level parameters at the time you connect to Snowflake
+    :param op_kwargs: a dictionary of keyword arguments that will get unpacked
+        in your function (templated)
     :param op_args: a list of positional arguments that will get unpacked when
         calling your callable (templated)
-    :param op_kwargs: a dictionary of keyword arguments that will get unpacked in your function (templated)
-    :param multiple_outputs: if set, function return value will be
-        unrolled to multiple XCom values. Dict will unroll to xcom values with keys as keys.
-        Defaults to False.
+    :param multiple_outputs: If set to True, the decorated function's return value will be unrolled to
+        multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys. Defaults to False.
     """
 
-    custom_operator_name = "@task.snowpark_python_venv"
+    custom_operator_name: str = "@task.snowpark_virtualenv"
 
-    # template_fields_renderers = {"op_args": "py", "op_kwargs": "py"}
-
-    # since we won't mutate the arguments, we should just do the shallow copy
-    # there are some cases we can't deepcopy the objects (e.g protobuf).
-    shallow_copy_attrs: Sequence[str] = ("python_callable",)
-
-    def __init__(
-        self,
-        *,
-        snowflake_conn_id: str = "snowflake_default",
-        parameters: dict | None = None,
-        warehouse: str | None = None,
-        database: str | None = None,
-        role: str | None = None,
-        schema: str | None = None,
-        authenticator: str | None = None,
-        session_parameters: dict | None = None,
-        python_callable,
-        op_args,
-        op_kwargs: dict,
-        **kwargs,
-    ) -> None:
-        self.snowflake_conn_id = snowflake_conn_id
-        self.parameters = parameters
-        self.warehouse = warehouse
-        self.database = database
-        self.role = role
-        self.schema = schema
-        self.authenticator = authenticator
-        self.session_parameters = session_parameters
-
+    def __init__(self, 
+                 *, 
+                 snowflake_conn_id: str | None = None,
+                 conn_id: str | None = None,
+                 python_callable, 
+                 op_args, 
+                 op_kwargs, 
+                 **kwargs
+            ) -> None:
+         
         kwargs_to_upstream = {
             "python_callable": python_callable,
             "op_args": op_args,
@@ -176,6 +133,7 @@ class _SnowparkPythonVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirt
         }
         super().__init__(
             kwargs_to_upstream=kwargs_to_upstream,
+            snowflake_conn_id= snowflake_conn_id or conn_id or 'snowflake_default',
             python_callable=python_callable,
             op_args=op_args,
             op_kwargs=op_kwargs,
@@ -183,20 +141,109 @@ class _SnowparkPythonVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirt
         )
 
 
-def snowpark_python_venv(
+def snowpark_virtualenv_task(
     python_callable: Callable | None = None,
     multiple_outputs: bool | None = None,
+    snowflake_conn_id: str | None = None,
     **kwargs,
 ) -> TaskDecorator:
-    """Wraps a function into an Airflow operator.
+    """Wraps a callable into an Airflow operator to run via a Python virtual environment.
     Accepts kwargs for operator kwarg. Can be reused in a single DAG.
+    This function is only used only used during type checking or auto-completion.
+    :meta private:
     :param python_callable: Function to decorate
     :param multiple_outputs: If set to True, the decorated function's return value will be unrolled to
-        multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys. Defaults to False.
+        multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys.
+        Defaults to False.
     """
     return task_decorator_factory(
         python_callable=python_callable,
         multiple_outputs=multiple_outputs,
-        decorated_operator_class=_SnowparkPythonVirtualenvDecoratedOperator,
+        snowflake_conn_id=snowflake_conn_id,
+        decorated_operator_class=_SnowparkVirtualenvDecoratedOperator,
+        **kwargs,
+    )
+
+class _SnowparkExternalPythonDecoratedOperator(DecoratedOperator, SnowparkExternalPythonOperator):
+    """
+    Wraps a Python callable and captures args/kwargs when called for execution.
+
+    :param python: Full path string (file-system specific) that points to a Python binary inside
+        a virtualenv that should be used (in ``VENV/bin`` folder). Should be absolute path
+        (so usually start with "/" or "X:/" depending on the filesystem/os used).
+    :param python_callable: A reference to an object that is callable
+    :param snowflake_conn_id or conn_id: A Snowflake connection name.  Default 'snowflake_default'
+    :param warehouse: name of warehouse (will overwrite any warehouse defined in the connection's extra JSON)
+    :param database: name of database (will overwrite database defined in connection)
+    :param schema: name of schema (will overwrite schema defined in connection)
+    :param role: name of role (will overwrite any role defined in connection's extra JSON)
+    :param authenticator: authenticator for Snowflake.
+        'snowflake' (default) to use the internal Snowflake authenticator
+        'externalbrowser' to authenticate using your web browser and
+        Okta, ADFS or any other SAML 2.0-compliant identify provider
+        (IdP) that has been defined for your account
+        'https://<your_okta_account_name>.okta.com' to authenticate
+        through native Okta.
+    :param session_parameters: You can set session-level parameters at the time you connect to Snowflake
+    :param op_kwargs: a dictionary of keyword arguments that will get unpacked
+        in your function (templated)
+    :param op_args: a list of positional arguments that will get unpacked when
+        calling your callable (templated)
+    :param multiple_outputs: If set to True, the decorated function's return value will be unrolled to
+        multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys. Defaults to False.
+    """
+
+    custom_operator_name: str = "@task.snowpark_ext_python"
+
+    def __init__(self, 
+                 *, 
+                 snowflake_conn_id: str | None = None,
+                 conn_id: str | None = None,
+                 python_callable, 
+                 op_args, 
+                 op_kwargs, 
+                 **kwargs
+            ) -> None:
+         
+        kwargs_to_upstream = {
+            "python_callable": python_callable,
+            "op_args": op_args,
+            "op_kwargs": op_kwargs,
+        }
+        super().__init__(
+            kwargs_to_upstream=kwargs_to_upstream,
+            snowflake_conn_id= snowflake_conn_id or conn_id or 'snowflake_default',
+            python_callable=python_callable,
+            op_args=op_args,
+            op_kwargs=op_kwargs,
+            **kwargs,
+        )
+
+
+def snowpark_ext_python_task(
+    python_callable: Callable | None = None,
+    multiple_outputs: bool | None = None,
+    python: str | None = None,
+    snowflake_conn_id: str | None = None,
+    **kwargs,
+) -> TaskDecorator:
+    """Wraps a callable into an Airflow operator to run via a Python virtual environment.
+    Accepts kwargs for operator kwarg. Can be reused in a single DAG.
+    This function is only used during type checking or auto-completion.
+    :meta private:
+    :param python: Full path string (file-system specific) that points to a Python binary inside
+        a virtualenv that should be used (in ``VENV/bin`` folder). Should be absolute path
+        (so usually start with "/" or "X:/" depending on the filesystem/os used).
+    :param python_callable: Function to decorate
+    :param multiple_outputs: If set to True, the decorated function's return value will be unrolled to
+        multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys.
+        Defaults to False.
+    """
+    return task_decorator_factory(
+        python=python,
+        snowflake_conn_id=snowflake_conn_id,
+        python_callable=python_callable,
+        multiple_outputs=multiple_outputs,
+        decorated_operator_class=_SnowparkExternalPythonDecoratedOperator,
         **kwargs,
     )

@@ -3,7 +3,7 @@ import io
 import json
 
 import pandas as pd
-from airflow.decorators import dag, task
+from airflow.decorators import dag, task, external_python_task
 from airflow.utils.dates import days_ago
 
 from astronomer.providers.snowflake.operators.snowpark import (
@@ -11,8 +11,11 @@ from astronomer.providers.snowflake.operators.snowpark import (
     SnowparkExternalPythonOperator,
     SnowparkPythonOperator
 )
+from astronomer.providers.snowflake.decorators.snowpark import snowpark_ext_python
 from astronomer.providers.snowflake.decorators.snowpark import (
-    snowpark_python,
+    snowpark_python_task,
+    snowpark_virtualenv_task,
+    snowpark_ext_python_task
 )
 from astronomer.providers.snowflake import SnowparkTable
 
@@ -40,27 +43,30 @@ PACKAGES = [
 )
 def test_dag():
 
-    # def test_task(df1:SnowparkTable, df2:SnowparkTable, str1:str, df6:SnowparkTable, mydict, df3:SnowparkTable, df4:SnowparkTable):
-    #     import snowflake.snowpark
-    #     from snowflake.snowpark import functions as F
-    #     from snowflake.snowpark import version as v
-    #     from snowflake.snowpark.functions import col, sproc, udf
+    @task.snowpark_ext_python_task
+    def test_task(df1:SnowparkTable, df2:SnowparkTable, str1:str, df6:SnowparkTable, mydict, df3:SnowparkTable, df4:SnowparkTable):
+        import snowflake.snowpark
+        from snowflake.snowpark import functions as F
+        from snowflake.snowpark import version as v
+        from snowflake.snowpark.functions import col, sproc, udf
         
-    #     snowpark_session.get_fully_qualified_current_schema()
+        snowpark_session.get_fully_qualified_current_schema()
         
-    #     df1.show()
-    #     df2.show()
-    #     df3.show()
-    #     df4.show()
-    #     df6.show()
-    #     mydict['mystr'] = str1
+        df1.show()
+        df2.show()
+        df3.show()
+        df4.show()
+        df6.show()
+        mydict['mystr'] = str1
 
-    #     return mydict['mystr']
+        return mydict['mystr']
     
-    from include.tests import test_task
+    EPdec = test_task(df1=df1, df2=df2, str1='testbad', df6=df6, df3=df3, mydict={}, df4=df4)
+    
+    from include.tests import test_task as test_task2
 
     VEop = SnowparkVirtualenvOperator(task_id='VEtask', 
-                                      python_callable=test_task, 
+                                      python_callable=test_task2, 
                                       python_version='3.8',
                                       database='sandbox',
                                       conn_id='snowflake_def',
@@ -74,7 +80,7 @@ def test_dag():
                                         #   python='/home/astro/.venv/snowpark/bin/python',
                                           python='/usr/local/bin/python3.8',
                                         #   python='/usr/local/bin/python3.9',
-                                          python_callable=test_task, 
+                                          python_callable=test_task2, 
                                           op_args = [df1, df2, 'testbad'], 
                                           op_kwargs = {'df3': df3, 'df4': df4, 'df6': df6, 'mydict': {}})
     EPop
@@ -113,7 +119,7 @@ def test_dag():
     #     mydict['mystr'] = str1
 
     #     return mydict['mystr']
-    # self = test_task(df1=df1, df2=df2, str1='testbad', df6=df6, df3=df3, mydict={}, df4=df4)
+    # SPdec = test_task(df1=df1, df2=df2, str1='testbad', df6=df6, df3=df3, mydict={}, df4=df4)
 
 
 
