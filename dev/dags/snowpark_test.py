@@ -6,7 +6,11 @@ import pandas as pd
 from airflow.decorators import dag, task
 from airflow.utils.dates import days_ago
 
-from astronomer.providers.snowflake.operators.snowpark import BaseSnowparkOperator
+from astronomer.providers.snowflake.operators.snowpark import (
+    SnowparkVirtualenvOperator, 
+    SnowparkExternalPythonOperator,
+    SnowparkPythonOperator
+)
 
 # try:
 #      from astro.sql.table import Table 
@@ -52,21 +56,45 @@ def test_dag():
 
         return mydict['mystr']
     
-    myop = BaseSnowparkOperator(task_id='mytask', 
-                                python_callable=test_task, 
-                                python_version='3.8',
-                                requirements=PACKAGES,
-                                op_args = tuple([SnowparkTable('STG_ORDERS', metadata={'database':'SANDBOX', 'schema':'michaelgregory'}), 
-                                                SnowparkTable('sandbox.michaelgregory.stg_ad_spend'),
-                                                'teststr'
-                                                ]), 
-                                op_kwargs = {'df3': SnowparkTable('STG_payments', metadata={'database':'SANDBOX'}), 
-                                            'df4': SnowparkTable('stg_customers'),
-                                            'df6': SnowparkTable('stg_sessions'),
-                                            'mydict': {},
+    VEop = SnowparkVirtualenvOperator(task_id='VEtask', 
+                                      python_callable=test_task, 
+                                      python_version='3.8',
+                                      requirements=PACKAGES,
+                                      op_args = tuple([SnowparkTable('STG_ORDERS', 
+                                                                     metadata={'database':'SANDBOX', 
+                                                                               'schema':'michaelgregory'}), 
+                                                       SnowparkTable('sandbox.michaelgregory.stg_ad_spend'),
+                                                       'teststr'
+                                                       ]), 
+                                      op_kwargs = {'df3': SnowparkTable('STG_payments', 
+                                                                        metadata={'database':'SANDBOX'}), 
+                                                   'df4': SnowparkTable('stg_customers'),
+                                                   'df6': SnowparkTable('stg_sessions'),
+                                                   'mydict': {},
+                                                   }
+                                        )
+    
+    EPop = SnowparkExternalPythonOperator(task_id='EPtask',
+                                        #   python='/home/astro/.venv/snowpark/bin/python',
+                                          python='/usr/local/bin/python3.8',
+                                        #   python='/usr/local/bin/python3.9',
+                                          python_callable=test_task, 
+                                          op_args = tuple([SnowparkTable('STG_ORDERS', 
+                                                                         metadata={'database':'SANDBOX', 
+                                                                                   'schema':'michaelgregory'}), 
+                                                           SnowparkTable('sandbox.michaelgregory.stg_ad_spend'),
+                                                           'teststr'
+                                                        ]), 
+                                          op_kwargs = {
+                                                'df3': SnowparkTable('STG_payments',
+                                                                     metadata={'schema':'MICHAELGREGORY'}), 
+                                                'df4': SnowparkTable('stg_customers'),
+                                                'df6': SnowparkTable('stg_sessions'),
+                                                'mydict': {},
                                             })
 
-    myop
+    VEop
+    EPop
 
 
 test_dag()
