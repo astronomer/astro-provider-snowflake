@@ -246,8 +246,7 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
 
         return fq_table_name
 
-    def get_python_source(self):
-        """Return the source of self.python_callable prepended with the Snowpark session creation."""
+    def _get_python_source(self):
 
         conn_params = get_snowflake_conn_params(self)
 
@@ -260,13 +259,16 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
 
         match_indent:str = ' ' * int(len(python_callable[1]) - len(python_callable[1].lstrip(' ')))
 
-        prepended_callable:list = ['from astronomer.providers.snowflake import SnowparkTable\n']
+        prepended_callable:list = []
+        prepended_callable.append('from astronomer.providers.snowflake import SnowparkTable\n')
+        prepended_callable.append('from snowflake.snowpark import Session as SnowparkSession\n')
+        prepended_callable.append('from snowflake.snowpark import functions as F\n')
+        prepended_callable.append('from snowflake.snowpark import types as T\n')
 
         #add the function def
         prepended_callable.append(f'{python_callable.pop(0)}\n')
 
         #create a snowpark session called 'snowpark_session'
-        prepended_callable.append(f'{match_indent}from snowflake.snowpark import Session as SnowparkSession\n')
         prepended_callable.append(f'{match_indent}snowpark_session = SnowparkSession.builder.configs({conn_params}).create()\n')
 
         #create a dict of SnowparkTable type args in order to auto instantiate Snowpark Dataframes for the user
@@ -318,6 +320,10 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
 
         return ''.join(prepended_callable)
     
+    def get_python_source(self):
+        """Return the source of self.python_callable prepended with the Snowpark session creation."""
+        return self._get_python_source()
+
 class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator):
     """
     Runs a Snowflake Snowpark Python function in a virtualenv that is created and destroyed automatically.
@@ -513,3 +519,116 @@ class SnowparkExternalPythonOperator(ExternalPythonOperator, _BaseSnowparkOperat
                 f"Requested python version {external_python_version} "
                 f"not in supported versions: {_SUPPORTED_SNOWPARK_PYTHON_VERSIONS} "
                 )
+        
+class SnowparkPythonUDFOperator(PythonVirtualenvOperator, _BaseSnowparkOperator):
+    """
+    Runs a Python Funciton as a temporary User Defined Function (UDF) in Snowpark.  
+    
+    Will use the base Airflow python to register the UDF or create a virtual environment if python_version is set.
+
+    Instantiates a Snowpark Session named 'snowpark_session' and attempts to create Snowpark Dataframes 
+    from any SnowparTable type annotated arguments.
+
+    Any requirements specified will be passed to the Snowpark backend.
+
+    The virtualenv must have this package installed for the SnowparkTable objects.
+
+    If an existing virtualenv has all necessary packages consider using the SnowparkExternalPythonOperator.
+
+    The function must be defined using def, and not be
+    part of a class. All imports must happen inside the function
+    and no variables outside the scope may be referenced. A global scope
+    variable named virtualenv_string_args will be available (populated by
+    string_args). In addition, one can pass stuff through op_args and op_kwargs, and one
+    can use a return value.
+
+    Note that if your virtualenv runs in a different Python major version than Airflow,
+    you cannot use return values, op_args, op_kwargs, or use any macros that are being provided to
+    Airflow through plugins. You can use string_args though.
+
+    .. seealso::
+        For more information on how to use this operator, take a look at the guide:
+        :ref:`howto/operator:PythonVirtualenvOperator`
+    :param snowflake_conn_id or conn_id: A Snowflake connection name.  Default 'snowflake_default'
+    :param python_callable: A python function with no references to outside variables,
+        defined with def, which will be run in a virtualenv
+    :param requirements: Either a list of requirement strings, or a (templated)
+        "requirements file" as specified by pip.
+    :param python_version: The Python version to run the virtualenv with. Note that
+        both 2 and 2.7 are acceptable forms.
+    :param use_dill: Whether to use dill to serialize
+        the args and result (pickle is default). This allow more complex types
+        but requires you to include dill in your requirements.
+    :param system_site_packages: Whether to include
+        system_site_packages in your virtualenv.
+        See virtualenv documentation for more information.
+    :param pip_install_options: a list of pip install options when installing requirements
+        See 'pip install -h' for available options
+    :param op_args: A list of positional arguments to pass to python_callable.
+    :param op_kwargs: A dict of keyword arguments to pass to python_callable.
+    :param string_args: Strings that are present in the global var virtualenv_string_args,
+        available to python_callable at runtime as a list[str]. Note that args are split
+        by newline.
+    :param templates_dict: a dictionary where the values are templates that
+        will get templated by the Airflow engine sometime between
+        ``__init__`` and ``execute`` takes place and are made available
+        in your callable's context after the template has been applied
+    :param templates_exts: a list of file extensions to resolve while
+        processing templated fields, for examples ``['.sql', '.hql']``
+    :param expect_airflow: expect Airflow to be installed in the target environment. If true, the operator
+        will raise warning if Airflow is not installed, and it will attempt to load Airflow
+        macros when starting.
+    """
+    template_fields: Sequence[str] = tuple({"requirements"} | set(_BaseSnowparkOperator.template_fields))
+    template_ext: Sequence[str] = (".txt",)
+
+    def __init__(
+        self,
+        *,
+        python_callable: Callable,
+        snowflake_conn_id: str = None,
+        conn_id: str = None,
+        requirements: None | Iterable[str] | str = None,
+        python_version: str | int | float | None = None,
+        use_dill: bool = False,
+        system_site_packages: bool = True,
+        pip_install_options: list[str] | None = None,
+        op_args: Collection[Any] | None = None,
+        op_kwargs: Mapping[str, Any] | None = None,
+        string_args: Iterable[str] | None = None,
+        templates_dict: dict | None = None,
+        templates_exts: list[str] | None = None,
+        expect_airflow: bool = True,
+        **kwargs,
+    ):
+        if python_version and python_version not in _SUPPORTED_SNOWPARK_PYTHON_VERSIONS:
+            raise AirflowException(
+                f"Requested python version {python_version} "
+                f"not in supported versions: {_SUPPORTED_SNOWPARK_PYTHON_VERSIONS} "
+                )
+        
+        self.snowflake_conn_id = snowflake_conn_id or conn_id or "snowflake_default"
+
+        super().__init__(
+            python_callable=python_callable,
+            requirements=requirements,
+            python_version=python_version,
+            use_dill=use_dill,
+            system_site_packages=system_site_packages,
+            pip_install_options=pip_install_options,
+            op_args=op_args,
+            op_kwargs=op_kwargs,
+            string_args=string_args,
+            templates_dict=templates_dict,
+            templates_exts=templates_exts,
+            expect_airflow=expect_airflow,
+            **kwargs,
+        )
+    def get_python_source(self):
+        """Return the source of self.python_callable prepended with the Snowpark UDF session creation."""
+
+        python_callable:str = self._get_python_source()
+
+        #TODO: add @udf decorator
+
+        return 

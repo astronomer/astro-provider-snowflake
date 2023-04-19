@@ -13,7 +13,7 @@ RUN chown -R astro:astro /home/astro/.cache
 USER astro
 
 #Seed packages in the 3.8 base for system-site-packages with PythonVirtualenvOperator
-RUN python3.8 -m pip install /tmp/requirements-snowpark.txt
+RUN python3.8 -m pip install -r /tmp/requirements-snowpark.txt
 
 
 # USER root
