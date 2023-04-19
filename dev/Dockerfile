@@ -2,7 +2,8 @@
 
 FROM quay.io/astronomer/astro-runtime:7.4.2-base
 
-# COPY include/astro_provider_snowflake-0.0.1-py3-none-any.whl /tmp
+COPY include/astro_provider_snowflake-0.0.1-py3-none-any.whl /tmp
+COPY requirements.txt requirements-snowpark.txt /tmp
 
 PYENV 3.8 snowpark requirements-snowpark.txt
 
@@ -12,8 +13,7 @@ RUN chown -R astro:astro /home/astro/.cache
 USER astro
 
 #Seed packages in the 3.8 base for system-site-packages with PythonVirtualenvOperator
-RUN python3.8 -m pip install 'snowflake-snowpark-python[pandas]==1.2.0' virtualenv 
-#/tmp/astro_provider_snowflake-0.0.1-py3-none-any.whl
+RUN python3.8 -m pip install /tmp/requirements-snowpark.txt
 
 
 # USER root

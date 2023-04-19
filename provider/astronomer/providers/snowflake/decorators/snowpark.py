@@ -39,7 +39,7 @@ class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator
     template_fields: Sequence[str] = ("templates_dict", "op_args", "op_kwargs")
     template_fields_renderers = {"templates_dict": "json", "op_args": "py", "op_kwargs": "py"}
 
-    custom_operator_name: str = "@task.snowpark_python"
+    custom_operator_name: str = "@snowpark_python_task"
 
     def __init__(self, 
                  *, 
@@ -75,6 +75,11 @@ def snowpark_python_task(
     """Wraps a function into an Airflow operator.
 
     Accepts kwargs for operator kwarg. Can be reused in a single DAG.
+
+    This decorator assumes that Snowpark libraries are installed on the Apache Airflow instance and, 
+    by definition, that the Airflow instance is running a version of python which is supported with 
+    Snowpark.  If not consider using a virtualenv and the snowpark_virtualenv_task or 
+    snowpark_ext_python_task decorator instead.
 
     :param python_callable: Function to decorate
     :param multiple_outputs: If set to True, the decorated function's return value will be unrolled to
@@ -114,7 +119,7 @@ class _SnowparkVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirtualenv
         multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys. Defaults to False.
     """
 
-    custom_operator_name: str = "@task.snowpark_virtualenv"
+    custom_operator_name: str = "@snowpark_virtualenv_task"
 
     def __init__(self, 
                  *, 
@@ -193,7 +198,7 @@ class _SnowparkExternalPythonDecoratedOperator(DecoratedOperator, SnowparkExtern
         multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys. Defaults to False.
     """
 
-    custom_operator_name: str = "@task.snowpark_ext_python"
+    custom_operator_name: str = "@snowpark_ext_python_task"
 
     def __init__(self, 
                  *, 

@@ -13,6 +13,7 @@ from airflow.operators.python import (
     PythonOperator
 )
 from airflow.exceptions import AirflowException
+from airflow.utils.decorators import remove_task_decorator
 
 #TODO: investigate merging SnowparkTable and SDK Table
 #     from astro.sql.table import Table 
@@ -110,7 +111,7 @@ class SnowparkPythonOperator(PythonOperator):
         
         if sys_ver not in _SUPPORTED_SNOWPARK_PYTHON_VERSIONS:
             raise AirflowException(f'Airflow python version {sys_ver} not supported by Snowpark. ',
-                                   'Try using SnowparkVirtualenvOperator.')
+                                   'Try using SnowparkVirtualenvOperator or @snowpark_virtualenv_task decorator.')
 
         if SnowparkSession is None:
             raise AirflowException("The snowflake-snowpark-python package is not installed.")
@@ -250,7 +251,12 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
 
         conn_params = get_snowflake_conn_params(self)
 
-        python_callable:list = dedent(inspect.getsource(self.python_callable)).split('\n')
+        python_callable:str = dedent(inspect.getsource(self.python_callable))
+
+        try: 
+            python_callable:list = remove_task_decorator(python_callable, self.custom_operator_name).split('\n')
+        except AttributeError:
+            python_callable:list = python_callable.split('\n')
 
         match_indent:str = ' ' * int(len(python_callable[1]) - len(python_callable[1].lstrip(' ')))
 
@@ -312,7 +318,6 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
 
         return ''.join(prepended_callable)
     
-
 class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator):
     """
     Runs a Snowflake Snowpark Python function in a virtualenv that is created and destroyed automatically.

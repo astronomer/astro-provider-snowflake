@@ -2,7 +2,13 @@
 #     from astro.sql.table import Table 
 # except: 
 from astronomer.providers.snowflake import SnowparkTable
-    
+# from astronomer.providers.snowflake.decorators.snowpark import (
+#     snowpark_python_task,
+#     snowpark_virtualenv_task,
+#     snowpark_ext_python_task
+# )
+# _SNOWPARK_BIN = '/home/astro/.venv/snowpark/bin/python'
+
 def test_task(df1:SnowparkTable, df2:SnowparkTable, str1:str, df6:SnowparkTable, mydict, df3:SnowparkTable, df4:SnowparkTable):
     import snowflake.snowpark
     from snowflake.snowpark import functions as F

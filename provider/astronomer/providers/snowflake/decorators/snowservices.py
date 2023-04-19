@@ -43,7 +43,7 @@ class _SnowServicesPythonDecoratedOperator(DecoratedOperator, SnowServicesPython
     # there are some cases we can't deepcopy the objects (e.g protobuf).
     shallow_copy_attrs: Sequence[str] = ("python_callable",)
 
-    custom_operator_name: str = "@task.snowservices_python"
+    custom_operator_name: str = "@snowservices_python_task"
 
     def __init__(self, *, runner_endpoint, python_callable, python, op_args, op_kwargs, **kwargs) -> None:
         kwargs_to_upstream = {
@@ -64,11 +64,11 @@ class _SnowServicesPythonDecoratedOperator(DecoratedOperator, SnowServicesPython
     def get_python_source(self):
         raw_source = inspect.getsource(self.python_callable)
         res = dedent(raw_source)
-        res = remove_task_decorator(res, "@snowservices_python")
+        res = remove_task_decorator(res, self.custom_operator_name)
         return res
 
 
-def snowservices_python(
+def snowservices_python_task(
     runner_endpoint: str, 
     python: str | None = None,
     python_callable: Callable | None = None,

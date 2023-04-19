@@ -1,0 +1,2 @@
+/tmp/astro_provider_snowflake-0.0.1-py3-none-any.whl
+virtualenv

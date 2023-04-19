@@ -1,2 +1,2 @@
+-r /tmp/requirements.txt
 snowflake-snowpark-python[pandas]==1.2.0
-# /tmp/astro_provider_snowflake-0.0.1-py3-none-any.whl
