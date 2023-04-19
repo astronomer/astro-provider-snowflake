@@ -37,7 +37,7 @@ _SNOWPARK_BIN = '/home/astro/.venv/snowpark/bin/python'
     start_date=days_ago(2),
     tags=["example"],
 )
-def test_dag():
+def snowpark_test_dag():
 
     from include.tests import test_task as test_task2
 
@@ -141,4 +141,4 @@ def test_dag():
 
 
 
-test_dag()
+snowpark_test_dag()
