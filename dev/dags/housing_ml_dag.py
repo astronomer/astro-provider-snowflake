@@ -3,7 +3,7 @@ import pandas as pd
 from airflow.decorators import dag, task
 from airflow.utils.dates import days_ago
 from astronomer.providers.snowflake.decorators.snowpark import snowpark_ext_python_task
-from astronomer.providers.snowflake import SnowparkTable
+from astronomer.providers.snowflake import Table
 
 PACKAGES = [
     "snowflake-snowpark-python",
@@ -208,7 +208,7 @@ def housing_ml_dag():
         ).limit(20)
 
     @snowpark_ext_python_task(python=_SNOWPARK_BIN, conn_id="snowflake_default", task_id="show_results")
-    def show_results_func(df: SnowparkTable):
+    def show_results_func(df: Table):
         df2 = df.select("ACTUAL_LABEL", "PREDICTION", "DELTA_PCT")
         df2.show()
 

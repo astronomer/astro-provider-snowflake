@@ -1,4 +1,4 @@
-from .snowservices import snowservices_python_task as snowservices_python
-from .snowpark import snowpark_python_task as snowpark_python
-from .snowpark import snowpark_virtualenv_task as snowpark_virtualenv
-from .snowpark import snowpark_ext_python_task as snowpark_ext_python
+from .snowservices import snowservices_python_task as snowservices_python_task
+from .snowpark import snowpark_python_task as snowpark_python_task
+from .snowpark import snowpark_virtualenv_task as snowpark_virtualenv_task
+from .snowpark import snowpark_ext_python_task as snowpark_ext_python_task

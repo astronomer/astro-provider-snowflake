@@ -5,6 +5,7 @@ import sys
 from textwrap import dedent
 import inspect
 from typing import Any, Callable, Collection, Iterable, Mapping, Sequence
+import inspect
 
 from airflow.operators.python import (
     _BasePythonVirtualenvOperator, 
@@ -12,15 +13,18 @@ from airflow.operators.python import (
     ExternalPythonOperator,
     PythonOperator
 )
-from airflow.exceptions import AirflowException
-from airflow.utils.decorators import remove_task_decorator
-
-#TODO: investigate merging SnowparkTable and SDK Table
-#     from astro.sql.table import Table 
-
-from astronomer.providers.snowflake import SnowparkTable
+from airflow.exceptions import (
+    AirflowException,
+)
 
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
+from astronomer.providers.snowflake import SnowparkTable
+
+try:
+    from astro.sql.table import Table, TempTable
+except:
+    Table = None    # type: ignore
+    TempTable = None
 
 try:
     from snowflake.snowpark import Session as SnowparkSession
@@ -35,7 +39,7 @@ def get_snowflake_conn_params(operator:Any) -> dict:
     #Conn params may come from the hook or set in the operator/decorator.
     #Some params (ie. warehouse, database, schema, etc) can be None as these are set in Snowflake defaults.
     #Some regions (ie. us-west-2) do not except a region param.  Account must be fully qualified instead.
-    #SnowparkTable class can also override this in get_fq_table_name()
+    #Table or SnowparkTable class can also override this in get_fq_table_name()
 
     #Start with params that come with the Snowflake hook
     conn_params = SnowflakeHook(snowflake_conn_id=operator.snowflake_conn_id)._get_conn_params()
@@ -226,7 +230,7 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         )
 
     @staticmethod
-    def get_fq_table_name(table:SnowparkTable, database:str = None, schema:str = None) -> str:
+    def _get_fq_table_name(table:Table | TempTable | SnowparkTable, database:str = None, schema:str = None) -> str:
 
         name:list = table.name.split('.')
 
@@ -245,38 +249,52 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
             AirflowException(f'Incorrect table name format {name}')
 
         return fq_table_name
-
+    
+    @staticmethod
+    def _is_table_arg(arg) -> bool:
+        return arg.__name__ in ['Table', 'TempTable', 'SnowparkTable'] \
+                and arg.__module__ in ['astronomer.providers.snowflake', 'astro.table']
+    
     def _get_python_source(self):
 
         conn_params = get_snowflake_conn_params(self)
 
-        python_callable:str = dedent(inspect.getsource(self.python_callable))
-
-        try: 
-            python_callable:list = remove_task_decorator(python_callable, self.custom_operator_name).split('\n')
-        except AttributeError:
-            python_callable:list = python_callable.split('\n')
-
+        #dedent callable and convert tab to space for PEP8
+        python_callable:list = dedent(inspect.getsource(self.python_callable)).replace('\t', '    ').split('\n')
+        
+        #remove decorators
+        for row in python_callable:
+            if python_callable[0][0] == '@':
+                python_callable.pop(0)
+        
         match_indent:str = ' ' * int(len(python_callable[1]) - len(python_callable[1].lstrip(' ')))
 
         prepended_callable:list = []
-        prepended_callable.append('from astronomer.providers.snowflake import SnowparkTable\n')
-        prepended_callable.append('from snowflake.snowpark import Session as SnowparkSession\n')
-        prepended_callable.append('from snowflake.snowpark import functions as F\n')
-        prepended_callable.append('from snowflake.snowpark import types as T\n')
+        prepended_callable.append(dedent(f"""
+            from snowflake.snowpark import Session as SnowparkSession
+            from snowflake.snowpark import functions as F
+            from snowflake.snowpark import types as T
+            try:
+                from astro.sql.table import Table, TempTable
+            except: 
+                print('Astro SDK is not installed.  Will not be able to process Table or TempTable args.')
+            from astronomer.providers.snowflake import SnowparkTable
+            snowpark_session = SnowparkSession.builder.configs({conn_params}).create()
+            snowflake_conn_id = '{self.snowflake_conn_id}'\n"""))
+            
 
         #add the function def
         prepended_callable.append(f'{python_callable.pop(0)}\n')
 
         #create a snowpark session called 'snowpark_session'
-        prepended_callable.append(f'{match_indent}snowpark_session = SnowparkSession.builder.configs({conn_params}).create()\n')
+        # prepended_callable.append(f'{match_indent}snowpark_session = SnowparkSession.builder.configs({conn_params}).create()\n')
 
-        #create a dict of SnowparkTable type args in order to auto instantiate Snowpark Dataframes for the user
+        #create a dict of Table or SnowparkTable type args in order to auto instantiate Snowpark Dataframes for the user
         full_spec = inspect.getfullargspec(self.python_callable)
         op_args = list(self.op_args)
         op_kwargs = self.op_kwargs
 
-        snowpark_table_args = {}
+        table_args = {}
 
         #first pop the positional args
         for op_arg in op_args:
@@ -285,11 +303,12 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
             except IndexError:
                 AirflowException('op_arg count does not match function arg count.')
 
-            if full_spec.annotations.get(current_arg) == SnowparkTable:
-                fq_table_name = self.get_fq_table_name(table=op_arg, 
+            current_arg_type = full_spec.annotations.get(current_arg)
+            if self._is_table_arg(current_arg_type):
+                fq_table_name = self._get_fq_table_name(table=op_arg, 
                                                        database=op_arg.metadata.database, 
                                                        schema=op_arg.metadata.schema)
-                snowpark_table_args[current_arg]=fq_table_name
+                table_args[current_arg]=fq_table_name
 
         #If there are any function args not yet consumed check for kwargs
         if op_kwargs:
@@ -297,28 +316,30 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
                 AirflowException('op_kwargs specified but no args in funciton signature remaining after op_args.')
             else:
                 param_types = inspect.signature(self.python_callable).parameters
-                for k, v in op_kwargs.items():
-                    if param_types.get(k).annotation == SnowparkTable:
-                        full_spec.args.remove(k)
+                for current_arg, value in op_kwargs.items():
+                    current_arg_type = param_types.get(current_arg).annotation
+                    if self._is_table_arg(current_arg_type):
+                        full_spec.args.remove(current_arg)
                         
-                        fq_table_name = self.get_fq_table_name(table=v, 
+                        fq_table_name = self._get_fq_table_name(table=value, 
                                                                database=conn_params['database'], 
                                                                schema=conn_params['schema'])
 
                         #If args are specified both in position and keyword, the keyword takes precedence.
-                        snowpark_table_args[k]=fq_table_name
+                        table_args[current_arg]=fq_table_name
 
         #prepend instantiation to the python_callable
-        for k, v in snowpark_table_args.items():
-            prepended_callable.append(f'{match_indent}{k} = snowpark_session.table("{v}")\n')
+        for arg_name, value in table_args.items():
+            prepended_callable.append(f'{match_indent}{arg_name} = snowpark_session.table("{value}")\n')
 
         #add the remaining lines of the python_callable
         for line in python_callable:
             prepended_callable.append(f'{line}\n')
         
         prepended_callable.append(f'{match_indent}snowpark_session.close()\n')
+        python_callable = ''.join(prepended_callable)
 
-        return ''.join(prepended_callable)
+        return python_callable
     
     def get_python_source(self):
         """Return the source of self.python_callable prepended with the Snowpark session creation."""
@@ -329,9 +350,9 @@ class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator
     Runs a Snowflake Snowpark Python function in a virtualenv that is created and destroyed automatically.
 
     Instantiates a Snowpark Session named 'snowpark_session' and attempts to create Snowpark Dataframes 
-    from any SnowparTable type annotated arguments.
+    from any SnowparTable or Astro Python SDK Table type annotated arguments.
 
-    The virtualenv must have this package installed for the SnowparkTable objects.
+    The virtualenv must have this package or Astro SDK installed in order pass table args.
 
     If an existing virtualenv has all necessary packages consider using the SnowparkExternalPythonOperator.
 
@@ -430,7 +451,9 @@ class SnowparkExternalPythonOperator(ExternalPythonOperator, _BaseSnowparkOperat
     Runs a Snowflake Snowpark Python function with a preexisting python environment.
 
     Instantiates a Snowpark Session named 'snowpark_session' and attempts to create Snowpark Dataframes 
-    from any SnowparTable type annotated arguments.
+    from any SnowparTable or Astro Python SDK Table type annotated arguments.
+    
+    The virtualenv must have this package or Astro SDK installed in order pass table args.
 
     If an existing virtualenv is not available consider using the SnowparkVirtualenvPythonOperator.
 
@@ -522,16 +545,19 @@ class SnowparkExternalPythonOperator(ExternalPythonOperator, _BaseSnowparkOperat
         
 class SnowparkPythonUDFOperator(PythonVirtualenvOperator, _BaseSnowparkOperator):
     """
+    ######WORK IN PROGRESS#####
+
+
     Runs a Python Funciton as a temporary User Defined Function (UDF) in Snowpark.  
     
     Will use the base Airflow python to register the UDF or create a virtual environment if python_version is set.
 
     Instantiates a Snowpark Session named 'snowpark_session' and attempts to create Snowpark Dataframes 
-    from any SnowparTable type annotated arguments.
+    from any SnowparTable or Astro python SDK Table type annotated arguments.
 
     Any requirements specified will be passed to the Snowpark backend.
 
-    The virtualenv must have this package installed for the SnowparkTable objects.
+    The virtualenv must have this package or Astro SDK installed in order pass table args.
 
     If an existing virtualenv has all necessary packages consider using the SnowparkExternalPythonOperator.
 

@@ -16,11 +16,21 @@ if TYPE_CHECKING:
 
 from airflow.exceptions import AirflowException
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
-from sqlalchemy.orm import Session
-from airflow.utils.session import NEW_SESSION
-from astro.files import File
-from astro.table import Table, TempTable, Metadata
-from airflow.models.dataset import Dataset
+from astronomer.providers.snowflake import SnowparkTable
+
+try:
+    from astro.files import File
+except: 
+    File = None
+try: 
+    from astro.table import Table, TempTable
+except:
+    Table = None
+    TempTable = None
+try: 
+    from airflow.models.dataset import Dataset
+except: 
+    Dataset = None
 
     
 _ENCODING = "utf-8"
@@ -225,14 +235,10 @@ class SnowflakeXComBackend(BaseXCom):
             json_str = value
             json_serializable = True
             value_type = 'str'
-        elif isinstance(value, File):
+        elif isinstance(value, (File, Table, TempTable, SnowparkTable)):
             json_str = json.dumps(value.to_json())
             json_serializable = True
-            value_type = 'aql_File'
-        elif isinstance(value, (Table, TempTable)):
-            json_str = json.dumps(value.to_json())
-            json_serializable = True
-            value_type = 'aql_Table'
+            value_type = type(value).__name__
         elif isinstance(value, Dataset):
             json_str = json.dumps({'uri': value.uri, 'extra': value.extra})
             json_serializable = True
@@ -361,11 +367,13 @@ class SnowflakeXComBackend(BaseXCom):
                 
             elif parsed_uri['xcom_table']:
 
-                assert parsed_uri['xcom_table'] == snowflake_xcom_table, f"Provided table {parsed_uri['xcom_table']} is different from system XCOM table {snowflake_xcom_table}."
+                assert parsed_uri['xcom_table'] == snowflake_xcom_table, \
+                    f"""Provided table {parsed_uri['xcom_table']} is different 
+                        from system XCOM table {snowflake_xcom_table}."""
 
                 xcom_cols = parsed_uri['xcom_key'].split('/')
 
-                ret_value = hook.get_records(f""" 
+                ret_value_type, ret_value = hook.get_records(f""" 
                                                 SELECT VALUE_TYPE, VALUE FROM {parsed_uri['xcom_table']} 
                                                 WHERE dag_id = '{xcom_cols[0]}'
                                                 AND task_id = '{xcom_cols[1]}'
@@ -374,19 +382,17 @@ class SnowflakeXComBackend(BaseXCom):
                                                 AND key = '{xcom_cols[4]}'
                                             ;""")[0]
                 
-                if ret_value[0] == 'str':
-                    return ret_value[1]
-                elif ret_value[0] == 'json':
-                    return json.loads(ret_value[1])
-                elif ret_value[0] == 'aql_File':
-                    return File.from_json(ret_value[1])
-                elif ret_value[0] == 'aql_Table':
-                    return Table.from_json(ret_value[1])
-                elif ret_value[0] == 'airflow_Dataset':
-                    dataset_dict = json.loads(ret_value[1])
+                if ret_value_type == 'str':
+                    return ret_value
+                elif ret_value_type == 'json':
+                    return json.loads(ret_value)
+                elif ret_value_type in ['File', 'Table', 'TempTable', 'SnowparkTable']:
+                    return globals()[ret_value_type].from_json(json.loads(ret_value))
+                elif ret_value_type == 'airflow_Dataset':
+                    dataset_dict = json.loads(ret_value)
                     return Dataset(uri=dataset_dict['uri'], extra=dataset_dict['extra'])
                 else:
-                    raise AttributeError(f'Unsupported return value type {ret_value[0]}.')
+                    raise AttributeError(f'Unsupported return value type {ret_value_type}.')
         else: 
             raise AttributeError('Failed to parse XCOM URI.')
 
@@ -397,7 +403,7 @@ class SnowflakeXComBackend(BaseXCom):
         task_id: str,
         dag_id: str, 
         run_id: str, 
-        map_index: int = -1,
+        map_index: int | None = None,
         **kwargs
     ) -> list:
         """
@@ -423,7 +429,7 @@ class SnowflakeXComBackend(BaseXCom):
         :type task_id: str
         :param run_id: DAG run id
         :type run_id: str
-        :param map_index: IGNORED
+        :param map_index: 
         :type map_index: int
         :return: The byte encoded uri string.
         :rtype: bytes

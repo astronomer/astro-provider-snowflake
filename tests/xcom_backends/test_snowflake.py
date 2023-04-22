@@ -5,13 +5,14 @@ import pandas as pd
 from astro.files import File
 from astro.table import Table, TempTable, Metadata
 from airflow.models.dataset import Dataset
+from astronomer.providers.snowflake import SnowparkTable
 
 
 
 os.environ['AIRFLOW__CORE__XCOM_SNOWFLAKE_CONN_NAME']='snowflake_default'
-os.environ['AIRFLOW__CORE__XCOM_SNOWFLAKE_TABLE']='SANDBOX.AIRFLOW_XCOM.XCOM_TABLE' 
+os.environ['AIRFLOW__CORE__XCOM_SNOWFLAKE_TABLE']='AIRFLOW_XCOM.PUBLIC.XCOM_TABLE' 
 os.environ['AIRFLOW__CORE__XCOM_BACKEND']='astronomer.providers.snowflake.xcom_backends.snowflake.SnowflakeXComBackend'
-os.environ['AIRFLOW__CORE__XCOM_SNOWFLAKE_STAGE']='SANDBOX.AIRFLOW_XCOM.XCOM_STAGE' 
+os.environ['AIRFLOW__CORE__XCOM_SNOWFLAKE_STAGE']='AIRFLOW_XCOM.PUBLIC.XCOM_STAGE' 
 
 
 #from astronomer.providers.snowflake.xcom_backends.snowflake import SnowflakeXComBackend
@@ -119,7 +120,7 @@ uris = self.serialize_value(value=complex_value, dag_id=dag_id, task_id=task_id,
 
 table_value=Table(name='TAXI_RAW', conn_id='snowflake_default', metadata=Metadata(schema='MICHAELGREGORY', database='SANDBOX'), columns=[], temp=False)
 uri = self._serialize(value=table_value, dag_id=dag_id, task_id=task_id, run_id=run_id, multi_index=multi_index, key='mytbl')
-# assert table_value == self._deserialize(uri)
+assert table_value == self._deserialize(uri)
 
 value=File('/tmp')
 
