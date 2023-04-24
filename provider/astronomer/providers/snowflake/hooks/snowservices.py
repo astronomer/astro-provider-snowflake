@@ -7,9 +7,11 @@ from pathlib import Path
 import tempfile
 import yaml
 from uuid import uuid4
+import requests
 
+from airflow.exceptions import AirflowException
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
-from astronomer.providers.snowflake.utils.helpers import SnowService
+from astronomer.providers.snowflake import SnowService
 
 try:
     from astronomer.providers.snowflake.utils.astro_cli_docker_helpers import (
@@ -18,9 +20,9 @@ try:
         docker_compose_kill,
         docker_compose_pause,
         docker_compose_unpause
-    )# noqa
+    ) # noqa
 except:
-    warnings.warn("The docker-compose package is not installed.")
+    pass
 
 
 class SnowServicesHook(SnowflakeHook):
@@ -228,10 +230,6 @@ class SnowServicesHook(SnowflakeHook):
     def create_service(self, 
         service_name : str, 
         pool_name: str = None, 
-        service_type: str = None, 
-        runner_endpoint_name: str = None,
-        runner_port: int = None,
-        runner_image_uri: str = None,
         spec_file_name : str = None,
         replace_existing: bool = False, 
         min_inst = 1, 
@@ -247,13 +245,6 @@ class SnowServicesHook(SnowflakeHook):
         :type pool_name: str
         :param service_type: Specify 'airflow-runner' to use defaults for runner.
         :type service_type: str
-        :param runner_endpoint_name: Endpoint name for the snowservice airflow runner.  
-        If not set use service_name as runner_endpoint_name.
-        :type runner_endpoint_name: str
-        :param runner_port: Port number (int) for the snowservice runner. Default 8081
-        :type runner_port: int
-        :param runner_image_uri: Name of Docker image to use for the service.
-        :type runner_image_uri: str
         :param replace_existing: Whether an existing service should be replaced or exit with failure.
         :type replace_existing: bool
         :param min_inst: The minimum number of nodes for scaling group
@@ -267,10 +258,6 @@ class SnowServicesHook(SnowflakeHook):
         snowservice = SnowService(
             service_name = service_name, 
             pool_name = pool_name, 
-            service_type = service_type, 
-            runner_endpoint_name = runner_endpoint_name,
-            runner_port = runner_port,
-            runner_image_uri = runner_image_uri,
             spec_file_name = spec_file_name,
             replace_existing = replace_existing, 
             min_inst = min_inst, 
@@ -281,12 +268,11 @@ class SnowServicesHook(SnowflakeHook):
         if self.local_test == 'astro_cli':
 
             try:
-                local_service_spec = snowservice.services_spec['local']
+                local_service_spec = snowservice.service_spec['local']
             except:
                 raise AttributeError('Provided spec does not include local docker compose specs.')
 
             try: 
-                
                 services = docker_compose_ps(local_service_spec=local_service_spec, status='running')
                 
                 if len(services) > 0 and not replace_existing:
@@ -300,7 +286,7 @@ class SnowServicesHook(SnowflakeHook):
             
         else:
             try:
-                snowservice_service_spec = snowservice.services_spec['snowservice']
+                snowservice_service_spec = snowservice.service_spec['snowservice']
             except:
                 raise AttributeError('Provided spec does not include snowservice docker compose specs.')
 
@@ -334,19 +320,18 @@ class SnowServicesHook(SnowflakeHook):
             ##TODO: need wait loop or asycn operation to make sure it is up
 
 
-    def suspend_service(self, service_name:str, service_type: str = None, spec_file_name:str = None):
+    def suspend_service(self, service_name:str, spec_file_name:str = None):
 
         if self.local_test == 'astro_cli':
 
             snowservice = SnowService(
                 service_name = service_name, 
-                service_type = service_type,
                 spec_file_name = spec_file_name,
                 local_test = self.local_test,
             )
 
             try:
-                local_service_spec = snowservice.services_spec['local']
+                local_service_spec = snowservice.service_spec['local']
             except:
                 raise AttributeError('Provided spec does not include local docker compose specs.')
 
@@ -370,19 +355,18 @@ class SnowServicesHook(SnowflakeHook):
             except: 
                 return 'failed'
 
-    def resume_service(self, service_name:str, service_type: str = None, spec_file_name:str = None):
+    def resume_service(self, service_name:str, spec_file_name:str = None):
 
         if self.local_test == 'astro_cli':
 
             snowservice = SnowService(
                 service_name = service_name, 
-                service_type = service_type,
                 spec_file_name = spec_file_name,
                 local_test = self.local_test,
             )
 
             try:
-                local_service_spec = snowservice.services_spec['local']
+                local_service_spec = snowservice.service_spec['local']
             except:
                 raise AttributeError('Provided spec does not include local docker compose specs.')
 
@@ -405,19 +389,18 @@ class SnowServicesHook(SnowflakeHook):
             except:
                 return 'failed'
 
-    def remove_service(self, service_name:str, service_type: str = None, spec_file_name:str = None):
+    def remove_service(self, service_name:str, spec_file_name:str = None):
 
         if self.local_test == 'astro_cli':
 
             snowservice = SnowService(
                 service_name = service_name, 
-                service_type = service_type,
                 spec_file_name = spec_file_name,
                 local_test = self.local_test,
             )
 
             try:
-                local_service_spec = snowservice.services_spec['local']
+                local_service_spec = snowservice.service_spec['local']
             except:
                 raise AttributeError('Provided spec does not include local docker compose specs.')
 
@@ -433,19 +416,17 @@ class SnowServicesHook(SnowflakeHook):
             except: 
                 return None
 
-    def describe_service(self, service_name:str, service_type: str = None, spec_file_name:str = None):
-        # response = {'pods': {}, 'services': {}, 'deployments': {}}
+    def describe_service(self, service_name:str, spec_file_name:str = None):
 
         if self.local_test == 'astro_cli':
             snowservice = SnowService(
                 service_name = service_name, 
-                service_type = service_type,
                 spec_file_name = spec_file_name,
                 local_test = self.local_test,
             )
 
             try:
-                local_service_spec = snowservice.services_spec['local']
+                local_service_spec = snowservice.service_spec['local']
             except:
                 raise AttributeError('Provided spec does not include local docker compose specs.')
 
@@ -459,30 +440,42 @@ class SnowServicesHook(SnowflakeHook):
             try:  
                 response = self.get_conn().cursor().execute(f'CALL SYSTEM$GET_SNOWSERVICE_STATUS({service_name}').fetchall()
                 # print(f"CALL SYSTEM$GET_SNOWSERVICE_STATUS({service_name}")
+                #TODO: test.  Try hook.run()
                 response = {'ingress_url': 'localhost:8001'}
                 return response
             except:
                 return None
             
-    def get_runner_url(self, service_name: str, service_type='airflow-runner', spec_file_name:str = None): 
+    def get_service_url(self, service_name: str, spec_file_name:str = None): 
 
         if self.local_test == 'astro_cli':
 
             snowservice = SnowService(
                 service_name = service_name, 
-                service_type = service_type,
                 spec_file_name = spec_file_name,
                 local_test = self.local_test,
             )
-            local_port = snowservice.services_spec['local']['services'][service_type]['ports'][0].split(':')[0]
-            return f'http://host.docker.internal:{local_port}'
+            local_port = snowservice.service_spec['local']['services'][service_name]['ports'][0].split(':')[0]
+            url = f'http://host.docker.internal:{local_port}'
+            headers = None
 
         else:    
             try:
-                
-                #response = self.get_conn().cursor().execute(f'CALL SYSTEM$GET_SNOWSERVICE_STATUS({service_name}').fetchall()
                 conn_params = self._get_conn_params()
-                response = f"http://{service_name}.{conn_params['schema']}.{conn_params['database']}.snowflakecomputing.internal"
-                return response
+                account = conn_params['account'].split('.')[0]
+                token_data = self.get_conn()._rest._token_request('ISSUE')
+
+                token = f"\"{token_data['data']['sessionToken']}\""
+                headers = {'Authorization': f'Snowflake Token={token}'}
+
+                url = f"https://{service_name}-{conn_params['schema']}-{conn_params['database']}.{account}.snowflakecomputing.app/api"
+
+                # validate the connection
+                response = requests.get(f'{url}', headers=headers)
+
+                return url, headers
             except:
-                return None
+                raise AirflowException() 
+            
+            
+        return url, headers

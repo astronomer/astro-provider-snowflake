@@ -1,9 +1,12 @@
 from __future__ import annotations
 from attr import define, field
+import warnings
+from pathlib import Path
+import yaml
 
 """Description of the package"""
 
-__version__ = "0.0.1"
+__version__ = "0.0.1-alpha2"
 
 def get_provider_info():
     return {
@@ -17,7 +20,7 @@ def get_provider_info():
             "astronomer.providers.snowflake.decorators.snowservices.snowservices_python",
             "astronomer.providers.snowflake.decorators.snowpark.dataframe_decorator"
         ],
-        "versions": ["0.0.1"],  # Required
+        "versions": ["0.0.1-alpha2"],  # Required
     }
 
 @define
@@ -69,3 +72,38 @@ class SnowparkTable:
             metadata=Metadata(**obj["metadata"]),
             conn_id=obj["conn_id"],
         )
+
+class SnowService():
+    def __init__(self, **kwargs) -> None:
+        self.service_name = kwargs.get('service_name')
+        self.pool_name = kwargs.get('pool_name') or None
+        self.spec_file_name = kwargs.get('spec_file_name') or None
+        self.replace_existing = kwargs.get('replace_existing') or False
+        self.min_inst = kwargs.get('min_inst') or None
+        self.max_inst = kwargs.get('max_inst') or None
+        self.local_test = kwargs.get('local_test') or None
+
+        if self.local_test != 'astro_cli':
+            assert self.pool_name, "Must specify pool_name if not running local_test mode."
+    
+        self.service_spec: dict = self.get_specs_from_file(self)
+
+    @staticmethod
+    def get_specs_from_file(self) -> dict:
+
+        spec_file = Path(self.spec_file_name)
+        
+        try: 
+            _ = spec_file.read_text()
+        except:
+            raise FileExistsError(f"Spec file {self.spec_file_name} does not exist or is not a readable file.")
+
+        else:
+            service_spec: list = {}
+            for doc in yaml.safe_load_all(spec_file.read_text()):
+                try:          
+                    service_spec.update(doc)        
+                except:
+                    raise yaml.YAMLError
+                    
+        return service_spec

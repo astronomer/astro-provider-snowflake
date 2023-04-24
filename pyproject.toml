@@ -41,7 +41,6 @@ dependencies = [
     "pandas>=1.5",
     "numpy>=1.23",
     "apache-airflow-providers-snowflake>=4.0.4",
-    "astro-sdk-python[snowflake]>=1.5",
 ]
 
 [project.optional-dependencies]

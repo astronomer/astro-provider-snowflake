@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing_extensions import Any
 import sys
-from textwrap import dedent
+from textwrap import dedent, indent
 import inspect
 from typing import Any, Callable, Collection, Iterable, Mapping, Sequence
 import inspect
@@ -259,16 +259,6 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
 
         conn_params = get_snowflake_conn_params(self)
 
-        #dedent callable and convert tab to space for PEP8
-        python_callable:list = dedent(inspect.getsource(self.python_callable)).replace('\t', '    ').split('\n')
-        
-        #remove decorators
-        for row in python_callable:
-            if python_callable[0][0] == '@':
-                python_callable.pop(0)
-        
-        match_indent:str = ' ' * int(len(python_callable[1]) - len(python_callable[1].lstrip(' ')))
-
         prepended_callable:list = []
         prepended_callable.append(dedent(f"""
             from snowflake.snowpark import Session as SnowparkSession
@@ -281,13 +271,38 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
             from astronomer.providers.snowflake import SnowparkTable
             snowpark_session = SnowparkSession.builder.configs({conn_params}).create()
             snowflake_conn_id = '{self.snowflake_conn_id}'\n"""))
-            
 
+        #dedent callable and convert tab to space for PEP8
+        python_callable:list = dedent(inspect.getsource(self.python_callable)).split('\n')
+        
+        #debug python_callable=['@mydec()', '@mydec2()', 'def func():', '  ', '            ', '\tx=1','    y=1']
+
+        #remove decorators
+        for row in python_callable:
+            if python_callable[0][0] == '@':
+                python_callable.pop(0)
+            
         #add the function def
+        assert python_callable[0].split('def')[0] == '', 'Function definition missing in first line.'
         prepended_callable.append(f'{python_callable.pop(0)}\n')
 
-        #create a snowpark session called 'snowpark_session'
-        # prepended_callable.append(f'{match_indent}snowpark_session = SnowparkSession.builder.configs({conn_params}).create()\n')
+        #debug python_callable=['  ', '            ', '\t\t', '#comment', '\tx=1\t','    y=1\t', '\t \t z=2']
+
+        #remove blank lines and comments
+        clean_python_callable=[]
+        for line in python_callable:
+            stripped_line = line.lstrip()
+            if stripped_line != '' and stripped_line[0] != '#':
+                for char in line:
+                    if char == '\t':
+                        line = line.replace('\t', '    ', 1)
+                    elif char == ' ':
+                        pass
+                    else:
+                            break
+                clean_python_callable.append(line)
+        
+        match_indent:str = ' ' * int(len(clean_python_callable[0]) - len(clean_python_callable[0].lstrip(' ')))
 
         #create a dict of Table or SnowparkTable type args in order to auto instantiate Snowpark Dataframes for the user
         full_spec = inspect.getfullargspec(self.python_callable)
@@ -330,14 +345,16 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
 
         #prepend instantiation to the python_callable
         for arg_name, value in table_args.items():
-            prepended_callable.append(f'{match_indent}{arg_name} = snowpark_session.table("{value}")\n')
+            prepended_callable.append(indent(text=f'{arg_name} = snowpark_session.table("{value}")\n', prefix=match_indent))
 
-        #add the remaining lines of the python_callable
-        for line in python_callable:
+        #add the remaining lines of the clean_python_callable
+        for line in clean_python_callable:
             prepended_callable.append(f'{line}\n')
         
-        prepended_callable.append(f'{match_indent}snowpark_session.close()\n')
+        prepended_callable.append(indent(text='snowpark_session.close()\n', prefix=match_indent))
         python_callable = ''.join(prepended_callable)
+
+        print(python_callable)
 
         return python_callable
     
