@@ -462,13 +462,17 @@ class SnowServicesHook(SnowflakeHook):
         else:    
             try:
                 conn_params = self._get_conn_params()
-                account = conn_params['account'].split('.')[0]
+
+                services = self.get_records(f"""SHOW SERVICES;
+                                            SELECT "public_endpoints" from table(result_scan(last_query_id())) WHERE service = {service_name};""")
+
+                # account = conn_params['account'].split('.')[0]
                 token_data = self.get_conn()._rest._token_request('ISSUE')
 
                 token = f"\"{token_data['data']['sessionToken']}\""
                 headers = {'Authorization': f'Snowflake Token={token}'}
 
-                url = f"https://{service_name}-{conn_params['schema']}-{conn_params['database']}.{account}.snowflakecomputing.app/api"
+                # url = f"https://{service_name}-{conn_params['schema']}-{conn_params['database']}.{account}.snowflakecomputing.app/api"
 
                 # validate the connection
                 response = requests.get(f'{url}', headers=headers)

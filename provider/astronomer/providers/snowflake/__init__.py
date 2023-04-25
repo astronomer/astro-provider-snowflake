@@ -6,7 +6,7 @@ import yaml
 
 """Description of the package"""
 
-__version__ = "0.0.1-alpha2"
+__version__ = "0.0.1-alpha4"
 
 def get_provider_info():
     return {
@@ -20,7 +20,7 @@ def get_provider_info():
             "astronomer.providers.snowflake.decorators.snowservices.snowservices_python",
             "astronomer.providers.snowflake.decorators.snowpark.dataframe_decorator"
         ],
-        "versions": ["0.0.1-alpha2"],  # Required
+        "versions": ["0.0.1-alpha4"],  # Required
     }
 
 @define

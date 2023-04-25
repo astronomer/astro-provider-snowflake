@@ -35,10 +35,8 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
 ]
 dependencies = [
-    "apache-airflow>=2.2.4",
     "aiohttp>=3.8.4",
-    "fastparquet>=2023.2.0",
-    "pandas>=1.5",
+    "snowflake-connector-python[pandas]!=3.0.3",
     "numpy>=1.23",
     "apache-airflow-providers-snowflake>=4.0.4",
 ]

@@ -235,11 +235,23 @@ class SnowflakeXComBackend(BaseXCom):
             json_str = value
             json_serializable = True
             value_type = 'str'
-        elif isinstance(value, (File, Table, TempTable, SnowparkTable)):
+        elif isinstance(value, SnowparkTable):
             json_str = json.dumps(value.to_json())
             json_serializable = True
-            value_type = type(value).__name__
-        elif isinstance(value, Dataset):
+            value_type = SnowparkTable.__name__
+        elif File and isinstance(value, File):
+            json_str = json.dumps(value.to_json())
+            json_serializable = True
+            value_type = File.__name__
+        elif Table and isinstance(value, Table):
+            json_str = json.dumps(value.to_json())
+            json_serializable = True
+            value_type = Table.__name__
+        elif TempTable and isinstance(value, TempTable):
+            json_str = json.dumps(value.to_json())
+            json_serializable = True
+            value_type = TempTable.__name__
+        elif Dataset and isinstance(value, Dataset):
             json_str = json.dumps({'uri': value.uri, 'extra': value.extra})
             json_serializable = True
             value_type = 'airflow_Dataset'
@@ -387,7 +399,11 @@ class SnowflakeXComBackend(BaseXCom):
                 elif ret_value_type == 'json':
                     return json.loads(ret_value)
                 elif ret_value_type in ['File', 'Table', 'TempTable', 'SnowparkTable']:
-                    return globals()[ret_value_type].from_json(json.loads(ret_value))
+                    try:
+                        type_obj = globals()[ret_value_type]
+                    except:
+                        raise AirflowException(f'Trying to deserialize object of type {ret_value_type}. But packages are not installed.')
+                    return type_obj.from_json(json.loads(ret_value))
                 elif ret_value_type == 'airflow_Dataset':
                     dataset_dict = json.loads(ret_value)
                     return Dataset(uri=dataset_dict['uri'], extra=dataset_dict['extra'])
