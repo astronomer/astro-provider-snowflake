@@ -1,2 +1,4 @@
--r /tmp/requirements.txt
-snowflake-snowpark-python[pandas]==1.2.0
+psycopg2-binary
+/tmp/astro_provider_snowflake-0.0.1-py3-none-any.whl
+snowflake-snowpark-python[pandas]==1.4.0
+virtualenv

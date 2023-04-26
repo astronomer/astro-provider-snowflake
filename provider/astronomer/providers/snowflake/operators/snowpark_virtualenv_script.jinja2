@@ -1,0 +1,78 @@
+import {{ pickling_library }}
+import sys
+from airflow.exceptions import AirflowException
+try:
+    from snowflake.snowpark import Session as SnowparkSession
+    from snowflake.snowpark import functions as F
+    from snowflake.snowpark import types as T
+except: 
+    raise AirflowException('Snowpark libraries are not installed in the environment.')
+try:
+    from astro.sql.table import Table, TempTable
+except: 
+    Table = TempTable = None
+from astronomer.providers.snowflake import SnowparkTable
+
+snowpark_session = SnowparkSession.builder.configs({{conn_params}}).create()
+snowflake_conn_id = '{{snowflake_conn_id}}'
+
+def _is_table_arg(arg) -> bool:
+    if ((Table != None or TempTable != None) and isinstance(arg, (Table, TempTable))) \
+            or isinstance(arg, SnowparkTable):
+        return True
+    else:
+        return False
+        
+{% if expect_airflow %}
+ {# Check whether Airflow is available in the environment.
+ # If it is, we'll want to ensure that we integrate any macros that are being provided
+ # by plugins prior to unpickling the task context. #}
+if sys.version_info >= (3,6):
+    try:
+        from airflow.plugins_manager import integrate_macros_plugins
+        integrate_macros_plugins()
+    except ImportError:
+        {# Airflow is not available in this environment, therefore we won't
+         # be able to integrate any plugin macros. #}
+        pass
+{% endif %}
+
+{% if op_args or op_kwargs %}
+with open(sys.argv[1], "rb") as file:
+    arg_dict = {{ pickling_library }}.load(file)
+{% else %}
+arg_dict = {"args": [], "kwargs": {}}
+{% endif %}
+
+#instantiate Table and SnowparkTable args as Snowpark dataframes
+new_arg_dict={'args':[], 'kwargs':{}}
+for arg in arg_dict['args']:
+    if _is_table_arg(arg):
+        new_arg_dict['args'].append(snowpark_session.table(arg.name))
+    else:
+        new_arg_dict['args'].append(arg)
+
+for arg_name, arg in arg_dict['kwargs'].items():
+    if _is_table_arg(arg):
+        new_arg_dict['kwargs'][arg_name] = snowpark_session.table(arg.name)
+    else:
+        new_arg_dict['kwargs'][arg_name] = arg
+
+arg_dict=new_arg_dict
+
+{% if string_args_global | default(true) -%}
+# Read string args
+with open(sys.argv[3], "r") as file:
+    virtualenv_string_args = list(map(lambda x: x.strip(), list(file)))
+{% endif %}
+
+# Script
+{{ python_callable_source }}
+res = {{ python_callable }}(*arg_dict["args"], **arg_dict["kwargs"])
+
+snowpark_session.close()
+
+# Write output
+with open(sys.argv[2], "wb") as file:
+    if res is not None:
+        {{ pickling_library }}.dump(res, file)

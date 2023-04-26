@@ -3,7 +3,9 @@ from __future__ import annotations
 try:
     from astro.sql.table import Table 
 except:
-    from astronomer.providers.snowflake import Table
+    Table = None
+
+from astronomer.providers.snowflake import SnowparkTable
     
 from astronomer.providers.snowflake.operators.snowpark import SnowparkVirtualenvOperator, SnowparkExternalPythonOperator
 from astronomer.providers.snowflake.operators.snowpark import _BaseSnowparkOperator
@@ -42,11 +44,11 @@ import inspect
 #         return cls
 
 
-df1 = Table('STG_ORDERS', metadata={'database':'SANDBOX', 'schema':'michaelgregory'})
-df2 = Table('sandbox.michaelgregory.stg_ad_spend')
-df3 = Table('STG_payments', metadata={'database':'SANDBOX'})
-df4 = Table('stg_customers')
-df6 = Table('stg_sessions')
+df1 = SnowparkTable('STG_ORDERS', metadata={'database':'SANDBOX', 'schema':'michaelgregory'})
+df2 = SnowparkTable('sandbox.michaelgregory.stg_ad_spend')
+df3 = SnowparkTable('STG_payments', metadata={'database':'SANDBOX'})
+df4 = SnowparkTable('stg_customers')
+df6 = SnowparkTable('stg_sessions')
 
 _SNOWPARK_BIN = '/home/astro/.venv/snowpark/bin/python'
 
@@ -70,23 +72,23 @@ _SNOWPARK_BIN = '/home/astro/.venv/snowpark/bin/python'
 #     return mydict['mystr']
 # test_task(df1=df1, df2=df2, str1='testbad', df6=df6, df3=df3, mydict={}, df4=df4)
 
-self = SnowparkVirtualenvOperator(task_id='VEtask',
-                                  conn_id = 'snowflake_mpg',
-                                      python_callable=test_task,
-                                      op_args = tuple([df1, df2, 'testbad']), 
-                                      op_kwargs = {'df3': df3, 'df4': df4, 'df6': df6, 'mydict': {},})
-print(self.get_python_source())
-
-# self = SnowparkExternalPythonOperator(task_id='myeptask',
-#                                     #   python='/home/astro/.venv/snowpark/bin/python',
-#                                         python='/usr/local/bin/python3.8',
-#                                     #   python='/usr/local/bin/python3.9',
-#                                         python_callable=test_task,
-#                                         op_args = tuple([df1, df2, 'testbad']), 
-#                                         op_kwargs = {'df3': df3, 'df4': df4, 'df6': df6, 'mydict': {},})
-
-
+# self = SnowparkVirtualenvOperator(task_id='VEtask',
+#                                   conn_id = 'snowflake_mpg',
+#                                       python_callable=test_task,
+#                                       op_args = tuple([df1, df2, 'testbad']), 
+#                                       op_kwargs = {'df3': df3, 'df4': df4, 'df6': df6, 'mydict': {},})
 # print(self.get_python_source())
+
+self = SnowparkExternalPythonOperator(task_id='myeptask',
+                                    #   python='/home/astro/.venv/snowpark/bin/python',
+                                        python='/usr/local/bin/python3.8',
+                                    #   python='/usr/local/bin/python3.9',
+                                        python_callable=test_task,
+                                        op_args = tuple([df1, df2, 'testbad']), 
+                                        op_kwargs = {'df3': df3, 'df4': df4, 'df6': df6, 'mydict': {},})
+
+
+print(self.get_python_source())
         
 # mydag=DAG(dag_id='testdag', start_date=days_ago(2))
 # mydag.add_task(self)
