@@ -51,7 +51,8 @@ def get_snowflake_conn_params(operator:Any) -> dict:
     conn_params = SnowflakeHook(snowflake_conn_id=operator.snowflake_conn_id)._get_conn_params()
 
     if conn_params['region'] in [None, '']:
-        assert len(conn_params['account'].split('.')) > 3, "Snowflake Region not set and account is not fully-qualified."
+        parse_logic = len(conn_params['account'].split('.')) > 3 or len(conn_params['account'].split('-')) >= 2
+        assert parse_logic, "Snowflake Region not set and account name is not fully-qualified."
 
     #replace with any that come from the operator at runtime
     if operator.warehouse:

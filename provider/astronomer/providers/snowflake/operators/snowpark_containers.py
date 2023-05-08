@@ -89,7 +89,7 @@ class SnowparkContainersPythonOperator(_BasePythonVirtualenvOperator):
     ):
 
         if not requirements:
-            self.requirements: list[str] | str = []
+            self.requirements = []
         elif isinstance(requirements, str):
             try: 
                 with open(requirements, 'r') as requirements_file:
@@ -97,7 +97,8 @@ class SnowparkContainersPythonOperator(_BasePythonVirtualenvOperator):
             except:
                 raise FileNotFoundError(f'Specified requirements file {requirements} does not exist or is not readable.')
         else:
-            self.requirements = list(requirements)
+            assert isinstance(requirements, list), "requirements must be a list or filename."
+            self.requirements = requirements
         
         hook = SnowparkContainersHook(snowflake_conn_id=snowflake_conn_id)
 

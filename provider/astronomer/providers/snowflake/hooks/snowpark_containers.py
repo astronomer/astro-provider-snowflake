@@ -97,7 +97,7 @@ class SnowparkContainersHook(SnowflakeHook):
         Returns a URI for snowflake connection environment variable.
         conn_params_str = SnowparkContainersHook()._get_uri_from_conn_params()
         os.environ['AIRFLOW_CONN_SNOWFLAKE_MYCONN'] = conn_params_str
-        SnowServicesHook(snowflake_conn_id='SNOWFLAKE_MYCONN').test_connection()
+        SnowparkContainersHook(snowflake_conn_id='SNOWFLAKE_MYCONN').test_connection()
         """
 
         #TODO: add session parameters and oath options

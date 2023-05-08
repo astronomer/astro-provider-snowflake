@@ -71,6 +71,7 @@ def snowsparkcontainer_python_task(
     runner_endpoint: str, 
     python: str | None = None,
     python_callable: Callable | None = None,
+    snowflake_conn_id:str = 'snowflake_default',
     multiple_outputs: bool | None = None,
     **kwargs,
 ) -> TaskDecorator:
