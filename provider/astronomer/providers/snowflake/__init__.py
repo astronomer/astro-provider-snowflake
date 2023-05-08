@@ -6,21 +6,21 @@ import yaml
 
 """Description of the package"""
 
-__version__ = "0.0.1-alpha4"
+__version__ = "0.0.1-alpha5"
 
 def get_provider_info():
     return {
         "package-name": "astro-provider-snowflake",  # Required
-        "name": "SnowServices and Snowpark Airflow Provider",  # Required
-        "description": "Decorator providers for SnowServices and Snowpark.",  # Required
+        "name": "SnowparkContainers and Snowpark Airflow Provider",  # Required
+        "description": "Decorator providers for SnowparkContainers and Snowpark.",  # Required
         "hook-class-names": [
-            "astronomer.providers.snowflake.hooks.snowservices.SnowServicesHook",
-            "astronomer.providers.snowflake.hooks.snowpark.SnowparkHook"],
+            "astronomer.providers.snowflake.hooks.snowpark_containers.SnowparkContainersHook",
+            ],
         "extra-links": [
-            "astronomer.providers.snowflake.decorators.snowservices.snowservices_python",
+            "astronomer.providers.snowflake.decorators.snowpark_containers.snowpark_containers_python",
             "astronomer.providers.snowflake.decorators.snowpark.dataframe_decorator"
         ],
-        "versions": ["0.0.1-alpha4"],  # Required
+        "versions": ["0.0.1-alpha5"],  # Required
     }
 
 @define
@@ -73,7 +73,7 @@ class SnowparkTable:
             conn_id=obj["conn_id"],
         )
 
-class SnowService():
+class SnowparkContainerService():
     def __init__(self, **kwargs) -> None:
         self.service_name = kwargs.get('service_name')
         self.pool_name = kwargs.get('pool_name') or None

@@ -212,8 +212,8 @@ class SnowflakeXComBackend(BaseXCom):
             multi_index: int,
         ) -> str:
         
-        #Other downstream systems such as Snowservice runners may have serialized to Snowflake already.
-        #Check for a valid xcom URI in return value and pass it through.
+        #Other downstream systems such as Snowpark Container runner services may have serialized to 
+        # Snowflake already. Check for a valid xcom URI in return value and pass it through.
         if _try_parse_snowflake_xcom_uri(value):
             return value
         

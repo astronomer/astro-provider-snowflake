@@ -10,7 +10,7 @@ try:
     from compose.cli.main import TopLevelCommand, project_from_options # noqa
 except ImportError:
     raise AirflowException(
-        "The local_test mode for SnowServicesHook requires the docker-compose package. Install with [docker] extras."
+        "The local_test mode for SnowparkContainersHook requires the docker-compose package. Install with [docker] extras."
     )
 
 class ComposeClient():

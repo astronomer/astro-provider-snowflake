@@ -2,16 +2,14 @@ from pendulum import datetime
 import os
 from airflow.decorators import dag, task
 
-from astronomer.providers.snowflake.operators.snowservices import SnowServicesPythonOperator
-from astronomer.providers.snowflake.decorators.snowservices import snowservices_python_task
-from astronomer.providers.snowflake.hooks.snowservices import SnowServicesHook
+from astronomer.providers.snowflake.operators.snowpark_containers import SnowparkContainersPythonOperator
+from astronomer.providers.snowflake.decorators.snowpark_containers import snowsparkcontainer_python_task
+from astronomer.providers.snowflake.hooks.snowpark_containers import SnowparkContainersHook
 
 
 @dag(
     start_date=datetime(2023, 1, 1),
     schedule=None,
-    # ``default_args`` will get passed on to each task. You can override them on a per-task basis during
-    # operator initialization.
     default_args={"retries": 2, "snowflake_conn_id": "snowflake_default"},
     tags=["example"],
 )
@@ -19,7 +17,7 @@ def sample_workflow():
     """
     ### Sample DAG
 
-    Showcases the snowservices provider package's operator and decorator.
+    Showcases the snowpark container services provider package's operator and decorator.
 
     To run this example, create a Snowflake connection with:
     - id: snowflake_default
@@ -39,15 +37,15 @@ def sample_workflow():
 
     pool_name = 'mypool'
     service_name = 'mysvc'
-    runner_image = 'mpgregor/snowservices-runner:latest'
+    runner_image = 'snowpark-container-runner:latest'
     service_url = 'host.docker.internal:8001'
     runner_endpoint = f'ws://{service_url}/task'
     _SNOWFLAKE_CONN_ID='snowflake_default'
 
     @task()
-    def setup_snowservice(pool_name:str, service_name:str, runner_image:str) -> str:
+    def setup_snowpark_container_service(pool_name:str, service_name:str, runner_image:str) -> str:
 
-        hook = SnowServicesHook(conn_id = _SNOWFLAKE_CONN_ID, local_test='astro_cli')
+        hook = SnowparkContainersHook(conn_id = _SNOWFLAKE_CONN_ID, local_test='astro_cli')
 
         pool_name = hook.create_pool(pool_name=pool_name, instance_family='standard_1', min_nodes=1, max_nodes=2, replace_existing=True)
 
@@ -58,9 +56,9 @@ def sample_workflow():
         return service_name
         
     @task()
-    def start_snowservice(service_name) -> str:
+    def start_snowpark_container_service(service_name) -> str:
 
-        hook = SnowServicesHook(conn_id = _SNOWFLAKE_CONN_ID)
+        hook = SnowparkContainersHook(conn_id = _SNOWFLAKE_CONN_ID)
 
         response = hook.resume_service(service_name=service_name)
 
@@ -84,12 +82,12 @@ def sample_workflow():
         return df #.to_json()
     
     #works
-    sspo1 = SnowServicesPythonOperator(task_id='sspo1', runner_endpoint=runner_endpoint, python_callable=myfunc1)
-    sspo2 = SnowServicesPythonOperator(task_id='sspo2', runner_endpoint=runner_endpoint, python_callable=myfunc2, op_kwargs={'json_input': {'a': {0: 4, 1: 4, 2: 4}, 'b': {0: 4, 1: 4, 2: 4}}})
+    sspo1 = SnowparkContainersPythonOperator(task_id='sspo1', runner_endpoint=runner_endpoint, python_callable=myfunc1)
+    sspo2 = SnowparkContainersPythonOperator(task_id='sspo2', runner_endpoint=runner_endpoint, python_callable=myfunc2, op_kwargs={'json_input': {'a': {0: 4, 1: 4, 2: 4}, 'b': {0: 4, 1: 4, 2: 4}}})
     # sspo1 >> sspo2
 
     #works
-    @snowservices_python_task(runner_endpoint=runner_endpoint, snowflake_conn_id=_SNOWFLAKE_CONN_ID)
+    @snowsparkcontainer_python_task(runner_endpoint=runner_endpoint, snowflake_conn_id=_SNOWFLAKE_CONN_ID)
     def myfunc5():
         import pandas as pd
         from snowflake.snowpark import Session
@@ -125,7 +123,7 @@ def sample_workflow():
     # myfunc3()
     # json_output = myfunc4()
 
-    @snowservices_python_task(runner_endpoint=runner_endpoint, python='3.9')
+    @snowsparkcontainer_python_task(runner_endpoint=runner_endpoint, python='3.9')
     def myfunc6(json_input: dict):
         import pandas as pd
         df = pd.read_json(json_input)
@@ -136,7 +134,7 @@ def sample_workflow():
 
     # myfunc6(json_input=json_output)
 
-    @snowservices_python_task(runner_endpoint=runner_endpoint, requirements=['openai', 'weaviate-client'], snowflake_conn_id=_SNOWFLAKE_CONN_ID)
+    @snowsparkcontainer_python_task(runner_endpoint=runner_endpoint, requirements=['openai', 'weaviate-client'], snowflake_conn_id=_SNOWFLAKE_CONN_ID)
     def myfunc7():
         import pandas as pd
         import openai
