@@ -92,6 +92,24 @@ class SnowparkContainersHook(SnowflakeHook):
         assert self.local_test in self.local_modes, \
             f"Unrecognized option for local_test={self.local_test}.  Current options are: {self.local_modes}."
 
+    def _get_uri_from_conn_params(self) -> str:
+        """
+        Returns a URI for snowflake connection environment variable.
+        conn_params_str = SnowparkContainersHook()._get_uri_from_conn_params()
+        os.environ['AIRFLOW_CONN_SNOWFLAKE_MYCONN'] = conn_params_str
+        SnowServicesHook(snowflake_conn_id='SNOWFLAKE_MYCONN').test_connection()
+        """
+
+        #TODO: add session parameters and oath options
+        return f"snowflake://{self.conn_params['user']}:\
+                             {self.conn_params['password']}@/\
+                             {self.conn_params['schema']}\
+                             ?account={self.conn_params['account']}\
+                             &region={self.conn_params['region']}\
+                             &database={self.conn_params['database']}\
+                             &warehouse={self.conn_params['warehouse']}\
+                             &role={self.conn_params['role']}".replace(' ','')
+    
     def create_pool(self, 
         pool_name : str, 
         instance_family:str = 'standard_1', 
