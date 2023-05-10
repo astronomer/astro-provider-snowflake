@@ -7,8 +7,8 @@ from pathlib import Path
 import tempfile
 import yaml
 from uuid import uuid4
-import requests
 from time import sleep
+import pandas as pd
 
 from airflow.exceptions import AirflowException
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
@@ -20,7 +20,9 @@ try:
         docker_compose_ps,
         docker_compose_kill,
         docker_compose_pause,
-        docker_compose_unpause
+        docker_compose_unpause,
+        docker_push,
+        docker_pull,
     ) # noqa
 except:
     pass
@@ -339,7 +341,7 @@ class SnowparkContainersHook(SnowflakeHook):
         ) -> str:
         
         """
-        Create a SnowparkContainer Service.
+        Create a Snowpark Container service.
 
         If there is an existing service with the same name it must be removed first.
 
@@ -399,7 +401,9 @@ class SnowparkContainersHook(SnowflakeHook):
             self.database = database if database else self.database or self.conn_params['database']
             self.schema = schema if schema else self.schema or self.conn_params['schema']
 
-            assert database and schema, "Database and schema must be set in conn params, hook params or args."
+            assert self.database and self.schema, "Database and schema must be set in conn params, hook params or args."
+
+            repository_url = self.get_repo_url(repository_name=repository_name, database=self.database, schema=self.schema)
             
             if services.get(service_name.upper()):
                 raise AirflowException(f"Service {service_name.upper()} exists.  The service must be removed before attempting creation.")
@@ -409,13 +413,9 @@ class SnowparkContainersHook(SnowflakeHook):
             except:
                 raise AttributeError('Provided spec does not include Snowpark Container Service specs.')
             
-            image_name = SCService_service_spec['spec']['container'][0]['image']
-
-            repository_url = self.list_repositories(repository_name=repository_name)[repository_name.upper()]['repository_url'].split('.')
-            repository_url[0] = f"{self.conn_params['account']}.registry"
-            repository_url = '.'.join(repository_url)
-
-            SCService_service_spec['spec']['container'][0]['image'] = repository_url+"/"+image_name
+            for container in SCService_service_spec['spec']['container']:
+                container['image']
+                container['image'] = repository_url+"/"+container['image']
 
             with tempfile.NamedTemporaryFile(mode='w+', dir=os.getcwd(), suffix='_spec.yaml') as tf:
                 temp_spec_file = Path(tf.name)
@@ -441,16 +441,21 @@ class SnowparkContainersHook(SnowflakeHook):
             try_count=10
             while try_count >= 0:
                 response = self.list_services(service_name=service_name)[service_name.upper()]['service_status']
-                if response['status'] != 'READY':
-                    print(f"Service created with status {response['status']}. Sleeping for retry.")
+                statuses = []
+                messages = []
+                for container in response.keys():
+                    statuses.append(response[container]['status'])
+                    messages.append(response[container]['message'])
+                status = set(statuses)
+                message = set(messages)
+                if status != {'READY'}:
+                    print(f"Service created with status {status}. Sleeping for retry.")
                     sleep(1)
                     try_count-=1 
                     if try_count == 0:
-                        raise AirflowException(f"Attempted to cretate service {service_name.upper()} but it is '{response['status']}' with message '{response['message']}'")
+                        raise AirflowException(f"Attempted to cretate service {service_name.upper()} but it is '{status} with message {message}'")
                 else:
                     return service_name
-
-
 
             ##TODO: need wait loop or asycn operation to make sure it is up
 
@@ -606,15 +611,12 @@ class SnowparkContainersHook(SnowflakeHook):
                 return 'failed'
         
         else:    
-            try: 
-                self.database = database if database else self.database or self.conn_params['database']
-                self.schema = schema if schema else self.schema or self.conn_params['schema']
+            self.database = database if database else self.database or self.conn_params['database']
+            self.schema = schema if schema else self.schema or self.conn_params['schema']
 
-                assert database and schema, "Database and schema must be set in conn params, hook params or args."
+            assert self.database and self.schema, "Database and schema must be set in conn params, hook params or args."
 
-                self.run(f'DROP SERVICE IF EXISTS {service_name}')
-            except: 
-                return None
+            self.run(f'DROP SERVICE IF EXISTS {service_name}')
 
     def list_services(self,
                       service_name:str = None,
@@ -665,7 +667,7 @@ class SnowparkContainersHook(SnowflakeHook):
             self.database = database if database else self.database or self.conn_params['database']
             self.schema = schema if schema else self.schema or self.conn_params['schema']
 
-            assert database and schema, "Database and schema must be set in conn params, hook params or args."
+            assert self.database and self.schema, "Database and schema must be set in conn params, hook params or args."
 
             prefix_str = f" STARTS WITH '{name_prefix.upper()}' " if name_prefix else ''
             like_str = f" LIKE '{service_name.upper()}' " if service_name else ''
@@ -674,8 +676,10 @@ class SnowparkContainersHook(SnowflakeHook):
             services = self.get_pandas_df(f"SHOW SERVICES {like_str} {prefix_str} {limit_str};").set_index('name').to_dict('index')
 
             for service in services.keys():
-                service_status = self.get_pandas_df(f"call system$get_service_status('{service.upper()}');")
-                services[service]['service_status'] = json.loads(service_status.iloc[0]['SYSTEM$GET_SERVICE_STATUS'])[0]
+                service_status = self.get_first(f"call system$get_service_status('{service.upper()}', 10);")
+                service_status = json.loads(service_status[0])
+                service_status = pd.DataFrame.from_dict(service_status).set_index('containerName').to_dict('index')
+                services[service]['service_status'] = service_status
 
             return services
             
@@ -715,3 +719,116 @@ class SnowparkContainersHook(SnowflakeHook):
             
             
         return url, headers
+    
+    def get_repo_url(self, 
+                     repository_name:str, 
+                     database:str = None, 
+                     schema:str=None):
+        
+        """
+        Returns a properly formated URL for docker login, push, pull, etc.
+
+        Snowpark Containers list repo does not include account information currently.
+        
+        """
+
+        database = database if database else self.database or self.conn_params['database']
+        schema = schema if schema else self.schema or self.conn_params['schema']
+
+        assert database and schema, "Database and schema must be set in conn params, hook params or args."
+
+        account = self.conn_params['account']
+        
+        assert len(account.split('-')) >= 2, "For Snowpark Container registry operations the account must be listed with '<org_name>-<account_name>.  Account name may contain dashes or underscores."
+
+        repository_url = self.list_repositories(
+            repository_name=repository_name,
+            database=database,
+            schema=schema)[repository_name.upper()]['repository_url'].split('.')
+        
+        repository_url[0] = f"{account}.registry"
+        repository_url = '.'.join(repository_url)   
+
+        return repository_url.lower()
+    
+    def push_images(self, 
+        service_name : str = None, 
+        spec_file_name : str = None,
+        repository_name: str = None,
+        database:str = None, 
+        schema:str = None,
+        image_sources:list = []
+        ) -> dict:
+        
+        """
+        Pull and push an images to a Snowpark Container Repository.
+
+
+        :param service_name: Name of SnowparkContainer Service holding the image name.
+        :type service_name: str
+        :param spec_file_name: Path to an existing YAML specification for the service
+        :type spec_file: str
+        :param repository_name: Name of the Snowpark Container respository where the image will be pushed. 
+            Optional in local mode.
+        :type repository_name: str
+        :param database: Optional: Database of the repository.
+        :type database: str
+        :param schema: Optional: Schema of the repository.
+        :type schema: str
+        """
+
+        database = database if database else self.database or self.conn_params['database']
+        schema = schema if schema else self.schema or self.conn_params['schema']
+
+        assert database and schema, "Database and schema must be set in conn params, hook params or args."
+            
+        SCService = SnowparkContainerService(
+            service_name = service_name, 
+            pool_name = 'dummy', 
+            spec_file_name = spec_file_name,
+            local_test = self.local_test
+        )
+
+        if self.local_test != 'astro_cli':
+            if not image_sources:
+
+                repository_url = self.get_repo_url(repository_name=repository_name, database=database, schema=schema)
+
+                try:
+                    image_sources = {}
+                    for container in SCService.service_spec['local']['services'].keys():
+                        image_sources[container] = {'image_source': SCService.service_spec['local']['services'][container]['image']}
+                except:
+                    raise AttributeError('No image source provided and no image found in local docker compose specs.')
+            else:
+                #image_sources = ['semitechnologies/weaviate:1.17.3','semitechnologies/ner-transformers:dbmdz-bert-large-cased-finetuned-conll03-english','quay.io/minio/minio:latest']
+                
+                temp_sources = {}
+                for image_source in image_sources:
+                    name = image_source.split('/')[-1].split(':')[0]
+                    temp_sources[name]={'image_source': image_source}
+                image_sources = temp_sources
+
+            for container in image_sources.keys():
+                image_name = image_sources[container]['image_source'].split('/')[-1].split(':')
+                image_sources[container]['image_dest'] = f'{repository_url}/{image_name[0]}'
+                image_sources[container]['tag'] = image_name[1]
+
+            auth_config = {'username': self.conn_params['user'], 'password': self.conn_params['password']}
+            
+            for container in image_sources.keys():
+                image_source = image_sources[container]['image_source']
+                image_dest = image_sources[container]['image_dest']
+                image_tag = image_sources[container]['tag']
+                print(f"Pulling image: {image_source}")
+
+                image = docker_pull(image_source=image_source, platform='linux/amd64')
+
+                print(f"Pushing {image.id} to {image_dest}:{image_tag}")
+                image_dest = docker_push(image_source=image, image_dest=image_dest, tag=image_tag, auth_config=auth_config)
+
+            return image_sources
+            
+        else:
+            return None
+    
