@@ -6,13 +6,13 @@ import yaml
 
 """Description of the package"""
 
-__version__ = "0.0.1-alpha5"
+__version__ = "0.0.1-dev"
 
 def get_provider_info():
     return {
-        "package-name": "astro-provider-snowflake",  # Required
-        "name": "SnowparkContainers and Snowpark Airflow Provider",  # Required
-        "description": "Decorator providers for SnowparkContainers and Snowpark.",  # Required
+        "package-name": "astro-provider-snowflake", 
+        "name": "SnowparkContainers and Snowpark Airflow Provider", 
+        "description": "Decorator providers for SnowparkContainers and Snowpark.", 
         "hook-class-names": [
             "astronomer.providers.snowflake.hooks.snowpark_containers.SnowparkContainersHook",
             ],
@@ -20,7 +20,7 @@ def get_provider_info():
             "astronomer.providers.snowflake.decorators.snowpark_containers.snowpark_containers_python",
             "astronomer.providers.snowflake.decorators.snowpark.dataframe_decorator"
         ],
-        "versions": ["0.0.1-alpha5"],  # Required
+        "versions": ["0.0.1-dev"],
     }
 
 @define
