@@ -508,7 +508,7 @@ class SnowparkContainersHook(SnowflakeHook):
             self.database = database if database else self.database or self.conn_params['database']
             self.schema = schema if schema else self.schema or self.conn_params['schema']
             
-            assert database and schema, "Database and schema must be set in conn params, hook params or args."
+            assert self.database and self.schema, "Database and schema must be set in conn params, hook params or args."
 
             try:   
                 self.run(f'ALTER SERVICE IF EXISTS {service_name} SUSPEND')
@@ -565,7 +565,7 @@ class SnowparkContainersHook(SnowflakeHook):
                 self.database = database if database else self.database or self.conn_params['database']
                 self.schema = schema if schema else self.schema or self.conn_params['schema']
 
-                assert database and schema, "Database and schema must be set in conn params, hook params or args."
+                assert self.database and self.schema, "Database and schema must be set in conn params, hook params or args."
 
                 self.run(f'ALTER SERVICE IF EXISTS {service_name} RESUME')
                 return 'success'
