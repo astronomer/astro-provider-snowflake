@@ -48,7 +48,6 @@ class ComposeClient():
     def __exit__(self, type, value, traceback):
         self.tf.close()
 
-
 def docker_compose_up(local_service_spec:dict, replace_existing=False):
 
     with ComposeClient(local_service_spec=local_service_spec) as client:      
@@ -123,3 +122,14 @@ def docker_push(image_source:str, image_dest:str, tag:str, auth_config:dict) -> 
     image.tag(repository=image_dest, tag=tag)
     
     client.images.push(repository=image_dest, tag=tag, auth_config=auth_config)
+
+def docker_logs(local_service_spec:dict) -> str:
+
+    client = docker.from_env()
+
+    compose_client = ComposeClient(local_service_spec=local_service_spec)
+    service_name = docker_compose_ps(local_service_spec=local_service_spec)[0]
+
+    for container in client.containers.list():
+        if f"{compose_client.project_name}_{service_name}" in container.name:
+            return container.logs()
