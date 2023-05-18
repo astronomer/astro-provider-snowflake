@@ -14,19 +14,17 @@ from airflow.exceptions import AirflowException
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
 from astronomer.providers.snowflake import SnowparkContainerService
 
-try:
-    from astronomer.providers.snowflake.utils.astro_cli_docker_helpers import (
+from astronomer.providers.snowflake.utils.astro_cli_docker_helpers import (
         docker_compose_up, 
         docker_compose_ps,
+        docker_ps,
         docker_compose_kill,
         docker_compose_pause,
         docker_compose_unpause,
         docker_push,
         docker_pull,
         docker_logs,
-    ) # noqa
-except:
-    pass
+)
 
 
 class SnowparkContainersHook(SnowflakeHook):
@@ -85,12 +83,12 @@ class SnowparkContainersHook(SnowflakeHook):
         self.local_test = kwargs.get("local_test") or None
         self.conn_params = self._get_conn_params()        
 
-        if self.local_test:
-            try:
-                Path('/var/run/docker.sock').stat()
-            except Exception as e:
-                if isinstance(e, FileNotFoundError):
-                    raise AttributeError('It looks like you are trying to run SnowparkContainersHook with local_test mode from a Docker container. To avoid a docker-in-docker inception problem please run local_test mode from non-containerized python.')
+        # if self.local_test:
+        #     try:
+        #         Path('/var/run/docker.sock').stat()
+        #     except Exception as e:
+        #         if isinstance(e, FileNotFoundError):
+        #             raise AttributeError('It looks like you are trying to run SnowparkContainersHook with local_test mode from a Docker container. To avoid a docker-in-docker inception problem please run local_test mode from non-containerized python.')
 
         assert self.local_test in self.local_modes, \
             f"Unrecognized option for local_test={self.local_test}.  Current options are: {self.local_modes}."
@@ -375,24 +373,12 @@ class SnowparkContainersHook(SnowflakeHook):
             local_test = self.local_test
         )
 
-        services = self.list_services(service_name=service_name, spec_file_name=spec_file_name, status='running')
-
         if self.local_test == 'astro_cli':
 
-            try:
-                local_service_spec = SCService.service_spec['local']
-            except:
-                raise AttributeError('Provided spec does not include local docker compose specs.')
+            local_service_spec = SCService.service_spec['local']
 
-            try: 
-                
-                if len(services) > 0 and not replace_existing:
-                    warnings.warn('Services currently running but replace_existing=False.  Not recreating')
-
-                docker_compose_up(local_service_spec=local_service_spec, replace_existing=replace_existing)
-            except:
-                raise()
-
+            docker_compose_up(local_service_spec=local_service_spec, replace_existing=replace_existing)
+                 
             return service_name
             
         else:
@@ -405,18 +391,15 @@ class SnowparkContainersHook(SnowflakeHook):
             assert self.database and self.schema, "Database and schema must be set in conn params, hook params or args."
 
             repository_url = self.get_repo_url(repository_name=repository_name, database=self.database, schema=self.schema)
-            
-            if services.get(service_name.upper()):
-                raise AirflowException(f"Service {service_name.upper()} exists.  The service must be removed before attempting creation.")
 
             try:
                 SCService_service_spec = SCService.service_spec['snowpark_container_service']
             except:
-                raise AttributeError('Provided spec does not include Snowpark Container Service specs.')
+                raise AirflowException('Provided spec does not include Snowpark Container Service specs.')
             
             for container in SCService_service_spec['spec']['container']:
                 container['image'] = repository_url+"/"+container['image'].split('/')[-1]
-
+            
             with tempfile.NamedTemporaryFile(mode='w+', dir=os.getcwd(), suffix='_spec.yaml') as tf:
                 temp_spec_file = Path(tf.name)
                 spec_string = yaml.dump(SCService_service_spec, default_flow_style=False)
@@ -436,27 +419,10 @@ class SnowparkContainersHook(SnowflakeHook):
                                     COMPUTE_POOL = {pool_name} 
                                     SPEC = @{temp_stage_name}/{temp_spec_file.name};""")
                 except Exception as e:
-                    raise e
-    
-            try_count=3
-            while try_count >= 0:
-                response = self.list_services(service_name=service_name)[service_name.upper()]['service_status']
-                statuses = []
-                messages = []
-                for container in response.keys():
-                    statuses.append(response[container]['status'])
-                    messages.append(response[container]['message'])
-                status = set(statuses)
-                message = set(messages)
-                if status != {'READY'}:
-                    print(f"Service created with status {status}. Sleeping for retry.")
-                    sleep(1)
-                    try_count-=1 
-                    if try_count == 0:
-                        print(f"Attempted to cretate service {service_name.upper()} but it is '{status} with message {message}'")
-                        return None
-                else:
-                    return service_name
+                    if 'already exists' in e.msg:
+                        raise AirflowException(f"Service {service_name.upper()} exists.  The service must be removed before attempting creation.")
+
+            return service_name
 
             ##TODO: need wait loop or asycn operation to make sure it is up
 
@@ -481,29 +447,18 @@ class SnowparkContainersHook(SnowflakeHook):
 
         if self.local_test == 'astro_cli':
 
+            assert spec_file_name, "spec_file_name is needed for local_test mode."
+
             SCService = SnowparkContainerService(
                 service_name = service_name, 
                 spec_file_name = spec_file_name,
                 local_test = self.local_test,
             )
 
-            try:
-                local_service_spec = SCService.service_spec['local']
-            except:
-                raise AttributeError('Provided spec does not include local docker compose specs.')
+            local_service_spec = SCService.service_spec['local']
 
-            try: 
-                
-                services = docker_compose_ps(local_service_spec=local_service_spec, status='running')
-                
-                if len(services) <= 0:
-                    warnings.warn('Services do not appear to be running.')
-                else:
-                    docker_compose_pause(local_service_spec=local_service_spec)
-                    return 'success'
-
-            except:
-                return 'failed'
+            docker_compose_pause(local_service_spec=local_service_spec)
+            
             
         else: 
             self.database = database if database else self.database or self.conn_params['database']
@@ -511,11 +466,7 @@ class SnowparkContainersHook(SnowflakeHook):
             
             assert self.database and self.schema, "Database and schema must be set in conn params, hook params or args."
 
-            try:   
-                self.run(f'ALTER SERVICE IF EXISTS {service_name} SUSPEND')
-                return 'success'
-            except: 
-                return 'failed'
+            self.run(f'ALTER SERVICE IF EXISTS {service_name} SUSPEND')
 
     def resume_service(self, 
                        service_name:str, 
@@ -538,41 +489,27 @@ class SnowparkContainersHook(SnowflakeHook):
 
         if self.local_test == 'astro_cli':
 
+            assert spec_file_name, "spec_file_name is needed for local_test mode."
+
             SCService = SnowparkContainerService(
                 service_name = service_name, 
                 spec_file_name = spec_file_name,
                 local_test = self.local_test,
             )
 
-            try:
-                local_service_spec = SCService.service_spec['local']
-            except:
-                raise AttributeError('Provided spec does not include local docker compose specs.')
+            local_service_spec = SCService.service_spec['local']
 
-            try: 
-                
-                services = docker_compose_ps(local_service_spec=local_service_spec, status='paused')
-                
-                if len(services) <= 0:
-                    warnings.warn('Services do not appear to be paused.')
-                else:
-                    docker_compose_unpause(local_service_spec=local_service_spec)
-                    return 'success'
-            except:
-                return 'failed'
+            docker_compose_unpause(local_service_spec=local_service_spec)
+            
 
         else: 
-            try:
-                self.database = database if database else self.database or self.conn_params['database']
-                self.schema = schema if schema else self.schema or self.conn_params['schema']
+            self.database = database if database else self.database or self.conn_params['database']
+            self.schema = schema if schema else self.schema or self.conn_params['schema']
 
-                assert self.database and self.schema, "Database and schema must be set in conn params, hook params or args."
+            assert self.database and self.schema, "Database and schema must be set in conn params, hook params or args."
 
-                self.run(f'ALTER SERVICE IF EXISTS {service_name} RESUME')
-                return 'success'
-            except:
-                return 'failed'
-
+            self.run(f'ALTER SERVICE IF EXISTS {service_name} RESUME')
+               
     def remove_service(self, 
                        service_name:str, 
                        spec_file_name:str = None,
@@ -594,22 +531,18 @@ class SnowparkContainersHook(SnowflakeHook):
 
         if self.local_test == 'astro_cli':
 
+            assert spec_file_name, "spec_file_name is needed for local_test mode."
+
             SCService = SnowparkContainerService(
                 service_name = service_name, 
                 spec_file_name = spec_file_name,
                 local_test = self.local_test,
             )
 
-            try:
-                local_service_spec = SCService.service_spec['local']
-            except:
-                raise AttributeError('Provided spec does not include local docker compose specs.')
+            local_service_spec = SCService.service_spec['local']
 
-            try: 
-                docker_compose_kill(local_service_spec=local_service_spec)
-                return 'success'
-            except:
-                return 'failed'
+            docker_compose_kill(local_service_spec=local_service_spec)
+            
         
         else:    
             self.database = database if database else self.database or self.conn_params['database']
@@ -621,20 +554,18 @@ class SnowparkContainersHook(SnowflakeHook):
 
     def list_services(self,
                       service_name:str = None,
-                      spec_file_name:str = None, 
-                      database:str = None, 
+                      database:str = None,
                       schema:str = None,
                       name_prefix:str = None, 
                       limit:int = None,
-                      status:str = None
-        ) -> dict or None:
+                      status:str = None,
+                      quiet:bool = False,
+        ) -> dict:
         """
         Return a dictionary of existing Snowpark Container services.
 
         :param service_name: Optionally provide a regex string to specify service names.
         :type service_name: str
-        :param spec_file_name: For local_mode a service spec must be provided.
-        :type spec_file_name: str
         :param database: Optional: Database of the service.
         :type database: str
         :param schema: Optional: Schema of the service.
@@ -643,26 +574,16 @@ class SnowparkContainersHook(SnowflakeHook):
         :type name_prefix: str        
         :param limit: Optionally limit returned result to specific number.
         :type limit: int
+        :param status: Optionally limit status to certain types.
+        :type status: str
+        :param quiet: Return a subset of data with current status only.
+        :type quiet: bool
         """
 
+        services = {}
+
         if self.local_test == 'astro_cli':
-            assert spec_file_name, "Local test mode requires a spec file."
-            SCService = SnowparkContainerService(
-                service_name = service_name, 
-                spec_file_name = spec_file_name,
-                local_test = self.local_test,
-            )
-
-            try:
-                local_service_spec = SCService.service_spec['local']
-            except:
-                raise AttributeError('Provided spec does not include local docker compose specs.')
-
-            try: 
-                response = docker_compose_ps(local_service_spec=local_service_spec, status=status)
-                return response
-            except:
-                return None
+            services = docker_ps(service_name=service_name)     
         
         else:
             self.database = database if database else self.database or self.conn_params['database']
@@ -677,11 +598,30 @@ class SnowparkContainersHook(SnowflakeHook):
             services = self.get_pandas_df(f"SHOW SERVICES {like_str} {prefix_str} {limit_str};").set_index('name').to_dict('index')
 
             for service in services.keys():
-                service_status = self.get_first(f"call system$get_service_status('{self.database}.{self.schema}.{service.upper()}', 10);")
-                service_status = json.loads(service_status[0])
-                service_status = pd.DataFrame.from_dict(service_status).set_index('containerName').to_dict('index')
-                services[service]['service_status'] = service_status
+                services[service]['public_endpoints'] = json.loads(services[service]['public_endpoints'])
+                
+                services[service]['service_status'] = {}
 
+                service_status = self.get_first(f"call system$get_service_status('{self.database}.{self.schema}.{service.upper()}', 10);")
+                for container in json.loads(service_status[0]):
+                    container_name = container.pop('containerName')
+                    if container_name not in services[service]['service_status'].keys():
+                        services[service]['service_status'].update({container_name: container})
+
+        if quiet:
+            status={}
+            for service in services.items():
+                for container in service[1]['service_status'].items():
+                    if service[0] in status.keys():
+                        status[service[0]].update({
+                            container[0]: {'status': container[1]['status'], 
+                                        'message': container[1]['message']}})
+                    else:
+                        status[service[0]] = {
+                            container[0]: {'status': container[1]['status'], 
+                                        'message': container[1]['message']}}
+            return status 
+        else: 
             return services
     
     def get_service_logs(self,
@@ -704,19 +644,22 @@ class SnowparkContainersHook(SnowflakeHook):
         """
 
         if self.local_test == 'astro_cli':
-            assert spec_file_name, "Local test mode requires a spec file."
+
+            logs = {}
+            
+            assert spec_file_name, "spec_file_name is needed for local_test mode."
+            
             SCService = SnowparkContainerService(
                 service_name = service_name, 
                 spec_file_name = spec_file_name,
                 local_test = self.local_test,
             )
 
-            try:
-                local_service_spec = SCService.service_spec['local']
-            except:
-                raise AttributeError('Provided spec does not include local docker compose specs.')
+            local_service_spec = SCService.service_spec['local']
 
-            return docker_logs(local_service_spec=local_service_spec)
+            logs = docker_logs(local_service_spec=local_service_spec)
+            
+            return logs
                 
         else:
             self.database = database if database else self.database or self.conn_params['database']
@@ -724,63 +667,33 @@ class SnowparkContainersHook(SnowflakeHook):
 
             assert self.database and self.schema, "Database and schema must be set in conn params, hook params or args."
 
-            service = self.list_services(service_name=service_name, status='running')
-            status = service[service_name.upper()]['service_status']
+            try:
+                status = self.list_services(service_name=service_name)[service_name.upper()]['service_status']
+            except KeyError:
+                raise AirflowException(f"Service '{service_name} is not running.  Cannot fetch logs.")
             
-            logs = {}
             for container in status:
-                container_name = container
                 instance_id = status[container]['instanceId']
-                instance_logs = self.get_records(f"CALL SYSTEM$GET_SERVICE_LOGS('{self.database}.{self.schema}.{service_name}', {instance_id}, '{container_name}');")
-                logs[container_name] = {instance_id: instance_logs}
+                instance_logs = self.get_records(f"CALL SYSTEM$GET_SERVICE_LOGS('{self.database}.{self.schema}.{service_name}', {instance_id}, '{container}');")
+                logs[container] = {instance_id: instance_logs[0][0]}
+
+                print(logs['weaviate']['0'])
 
             return logs
             
-    def get_service_urls(self, 
-                        service_name: str, 
-                        spec_file_name:str = None,
-                        local_docker_network = 'host.docker.internal',
-                    ) -> tuple(dict, str): 
+    def get_service_urls(self, service_name: str) -> tuple(dict, dict): 
+        
+        service = self.list_services(service_name=service_name)[service_name.upper()]
+            
+        assert service, f"Service '{service_name}' is not running."
 
         if self.local_test == 'astro_cli':
-            assert spec_file_name, "Local test mode requires a spec file."
-
-            SCService = SnowparkContainerService(
-                service_name = service_name, 
-                spec_file_name = spec_file_name,
-                local_test = self.local_test,
-            )
-            
-            labels = SCService.service_spec['local']['services'][service_name]['labels']
-
-            for label in labels:
-                label = label.split('=')
-                if label[0] == 'port_names':
-                    port_names = label[1].split(',')
-            
-            assert port_names, "port_names not listed in local docker spec labels."
-
-            port_numbers = SCService.service_spec['local']['services'][service_name]['ports']
-
-            assert len(port_names) == len(port_numbers), "Number of ports and port names differ in docker spec."
-
-            urls = [f"http://{local_docker_network}:{port.split(':')[0]}" for port in port_numbers]
-
-            urls = dict(zip(port_names, urls))
+            urls = {k: f"http://{v}" for k, v in service['public_endpoints'].items()}
             headers = None
 
         else:    
-
-            service = self.list_services(service_name=service_name)[service_name.upper()]
-            urls = {k: f"https://{v}" for k, v in json.loads(service['public_endpoints']).items()}
-            
-            #need session_parameters PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = json for oauth token fetching
-            conn = self.get_conn()
-            token_data = conn._rest._token_request('ISSUE')
-            conn.close()
-
-            token = f"\"{token_data['data']['sessionToken']}\""
-            headers = {'Authorization': f'Snowflake Token={token}'}            
+            urls = {k: f"https://{v}" for k, v in service['public_endpoints'].items()}
+            headers = {'Authorization': f'Snowflake Token="{self.get_conn().rest.token}"'}
             
         return urls, headers
     
@@ -808,10 +721,11 @@ class SnowparkContainersHook(SnowflakeHook):
         repository_url = self.list_repositories(
             repository_name=repository_name,
             database=database,
-            schema=schema)[repository_name.upper()]['repository_url'].split('.')
+            schema=schema)[repository_name.upper()]['repository_url']
+        #.split('.')
         
-        repository_url[0] = f"{account}.registry".replace('_','-')
-        repository_url = '.'.join(repository_url)   
+        #repository_url[0] = f"{account}".replace('_','-')
+        #repository_url = '.'.join(repository_url)   
 
         return repository_url #.lower()
     

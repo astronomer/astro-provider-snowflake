@@ -90,20 +90,21 @@ class SnowparkContainerService():
 
     @staticmethod
     def get_specs_from_file(self) -> dict:
-
-        spec_file = Path(self.spec_file_name)
         
+        service_spec: list = {}
         try: 
-            _ = spec_file.read_text()
-        except:
-            raise FileExistsError(f"Spec file {self.spec_file_name} does not exist or is not a readable file.")
-
-        else:
-            service_spec: list = {}
-            for doc in yaml.safe_load_all(spec_file.read_text()):
+            docs = yaml.safe_load_all(Path(self.spec_file_name).read_text())
+            for doc in docs:
                 try:          
                     service_spec.update(doc)        
                 except:
                     raise yaml.YAMLError
-                    
+        except:
+            raise FileExistsError(f"Spec file {self.spec_file_name} does not exist or is not a readable file.")            
+                
+        if self.local_test == 'astro_cli':
+            assert service_spec['local'], 'Provided spec does not include a local docker compose spec.'
+        else:
+            assert service_spec['snowpark_container_service'], 'Provided spec does not include a snowpark container spec.'
+            
         return service_spec

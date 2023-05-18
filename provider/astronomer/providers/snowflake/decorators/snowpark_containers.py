@@ -17,9 +17,10 @@ class SnowparkContainerPythonDecoratedOperator(DecoratedOperator, SnowparkContai
     TODO: Update docs
      :param snowflake_conn_id: connection to use when running code within the Snowpark Container runner service.
     :type snowflake_conn_id: str  (default is snowflake_default)
-    :param runner_endpoint: URL endpoint of the instantiated Snowpark Container runner service 
-        (ie. ws://<hostnam>:<port>/<endpoint>)
-    :type runner_endpoint: str
+    :param endpoint: Endpoint URL of the instantiated Snowpark Container runner.  
+    :type endpoint: str
+    :param headers: Optional OAUTH bearer token for Snowpark Container runner.  In local_test mode this can be None.
+    :type headers: str
     :param python_callable: Function to decorate
     :type python_callable: Callable 
     :param python: Python version (ie. '<maj>.<min>').  Callable will run similar to PythonVirtualenvOperator 
@@ -27,7 +28,6 @@ class SnowparkContainerPythonDecoratedOperator(DecoratedOperator, SnowparkContai
     :type python: str:
     :param requirements: List of python dependencies to be installed for the callable.
     :type requirements: list
-    
     :param op_kwargs: a dictionary of keyword arguments that will get unpacked
         in your function (templated)
     :param op_args: a list of positional arguments that will get unpacked when
@@ -45,9 +45,10 @@ class SnowparkContainerPythonDecoratedOperator(DecoratedOperator, SnowparkContai
 
     custom_operator_name: str = "@snowsparkcontainer_python_task"
 
-    def __init__(self, *, runner_endpoint, python_callable, python, op_args, op_kwargs, **kwargs) -> None:
+    def __init__(self, *, endpoint, headers, python_callable, python, op_args, op_kwargs, **kwargs) -> None:
         kwargs_to_upstream = {
-            "runner_endpoint": runner_endpoint,
+            "endpoint": endpoint,
+            "headers": headers,
             "python_callable": python_callable,
             "python": python,
             "op_args": op_args,
@@ -68,7 +69,8 @@ class SnowparkContainerPythonDecoratedOperator(DecoratedOperator, SnowparkContai
         return res
 
 def snowsparkcontainer_python_task(
-    runner_endpoint: str, 
+    endpoint: str, 
+    headers: str | None = None,
     python: str | None = None,
     python_callable: Callable | None = None,
     snowflake_conn_id:str = 'snowflake_default',
@@ -85,9 +87,10 @@ def snowsparkcontainer_python_task(
     
     :param snowflake_conn_id: connection to use when running code within the Snowpark Container runner service.
     :type snowflake_conn_id: str  (default is snowflake_default)
-    :param runner_endpoint: URL endpoint of the instantiated Snowpark Container runner service 
-        (ie. ws://<hostnam>:<port>/<endpoint>)
-    :type runner_endpoint: str
+    :param endpoint: Endpoint URL of the instantiated Snowpark Container runner.  
+    :type endpoint: str
+    :param headers: Optional OAUTH bearer token for Snowpark Container runner.  In local_test mode this can be None.
+    :type headers: str
     :param python_callable: Function to decorate
     :type python_callable: Callable 
     :param python: Python version (ie. '<maj>.<min>').  Callable will run in a PythonVirtualenvOperator on the runner.  
@@ -99,7 +102,8 @@ def snowsparkcontainer_python_task(
     :type multiple_outputs: bool
     """
     return task_decorator_factory(
-        runner_endpoint=runner_endpoint, 
+        endpoint=endpoint,
+        headers=headers, 
         python=python,
         python_callable=python_callable,
         multiple_outputs=multiple_outputs,

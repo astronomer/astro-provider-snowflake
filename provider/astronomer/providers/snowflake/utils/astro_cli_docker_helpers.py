@@ -5,14 +5,18 @@ import io
 from contextlib import redirect_stdout
 from airflow.exceptions import AirflowException
 import os
+import warnings
 
 try:
     import docker
     from compose.cli.main import TopLevelCommand, project_from_options # noqa
 except ImportError:
-    raise AirflowException(
-        "The local_test mode for SnowparkContainersHook requires the docker-compose package. Install with [docker] extras."
-    )
+    warnings.warn(
+        "SnowparkContainersHook requires the docker and docker-compose packages \
+         for local_test mode. Install with [docker] extras.\
+        Note: To avoid docker-in-docker inception problems these functions will \
+         not be available to Airflow tasks in a docker container."
+    ) # noqa
 
 class ComposeClient():
 
@@ -40,7 +44,8 @@ class ComposeClient():
             "--project-name": self.project_name,
             "SERVICE": "",
         }
-        self.project = project_from_options(project_dir = self.temp_spec_file.parent.as_posix(), options=self.docker_compose_options)
+        self.project = project_from_options(project_dir = self.temp_spec_file.parent.as_posix(), 
+                                            options=self.docker_compose_options)
         self.cmd = TopLevelCommand(project=self.project)
 
         return self
@@ -65,6 +70,71 @@ def docker_compose_up(local_service_spec:dict, replace_existing=False):
         })
 
         client.cmd.up(client.docker_compose_options)
+
+def docker_ps(service_name:str = None) -> dict:
+
+    try: 
+        client = docker.from_env()
+
+        astro_config = yaml.safe_load(Path('.astro/config.yaml').read_text())
+
+        containers = client.containers.list()
+        running_containers={}
+        for container in containers:
+
+            project_name = container.name.split('_')[0]
+
+            if project_name == astro_config['project']['name'] and 'io.astronomer.docker' not in container.attrs['Config']['Labels'].keys():
+                container_name = ''.join(container.name.split('_')[1:-1])
+                running_service_name = container.attrs['Config']['Labels']['service_name'].upper()
+                extra_host_name = container.attrs['HostConfig']['ExtraHosts'][0].split(':')[0]
+                port_names = container.attrs['Config']['Labels']['port_names'].split(',')
+                port_numbers = [port.split('/')[0] for port in list(container.attrs['Config']['ExposedPorts'])]
+
+                assert len(port_names) == len(port_numbers), "Number of ports and port names differ in docker spec. Specify 'port_names' as a comma-separated"
+
+                assert running_service_name, "Service name must be listed as a 'label' in docker compose spec."
+
+                if running_service_name not in running_containers.keys():
+                    running_containers[running_service_name] = {
+                            'database_name': '', 
+                            'schema_name': '', 
+                            'owner': '', 
+                            'compute_pool': '', 
+                            'spec': '',
+                            'dns_name': '', 
+                            'public_endpoints': {}, 
+                            'min_instances': '', 
+                            'max_instances': '', 
+                            'created_on': container.attrs['Created'], 
+                            'service_status': {}
+                    }
+                for port_name, port_number in zip(port_names, port_numbers):
+                    if port_name not in running_containers[running_service_name]['public_endpoints'].keys():
+                        running_containers[running_service_name]['public_endpoints'].update({port_name: f'{extra_host_name}:{port_number}'})
+
+                    if container_name not in running_containers[running_service_name]['service_status'].keys():
+                        running_containers[running_service_name]['service_status'].update({
+                            container_name: {'status': container.status,
+                                            'message': '',
+                                            'instanceId': str(int(container.name.split('_')[2])-1),
+                                            'serviceName': running_service_name,
+                                            'image': container.attrs['Config']['Image'],
+                                            'restartCount': container.attrs['RestartCount']
+                                }
+                        })
+        
+        if service_name:
+            try: 
+                return {service_name.upper(): running_containers[service_name.upper()]}
+            except:
+                return {}
+        else:
+            return running_containers
+
+    except NameError:
+        print('Docker is not installed.')
+        return {}
 
 def docker_compose_ps(local_service_spec:dict, status:str = None) -> list:
 
@@ -123,13 +193,20 @@ def docker_push(image_source:str, image_dest:str, tag:str, auth_config:dict) -> 
     
     client.images.push(repository=image_dest, tag=tag, auth_config=auth_config)
 
-def docker_logs(local_service_spec:dict) -> str:
+def docker_logs(local_service_spec:dict) -> dict:
 
     client = docker.from_env()
 
     compose_client = ComposeClient(local_service_spec=local_service_spec)
-    service_name = docker_compose_ps(local_service_spec=local_service_spec)[0]
+    service_conatiner_names = docker_compose_ps(local_service_spec=local_service_spec)
+    running_containers = client.containers.list()
 
-    for container in client.containers.list():
-        if f"{compose_client.project_name}_{service_name}" in container.name:
-            return container.logs()
+    logs= {} 
+
+    for container_name in service_conatiner_names:
+        for running_container in running_containers:
+            if f"{compose_client.project_name}_{container_name}" in running_container.name:
+                instance_id = str(int(running_container.name.split('_')[2])-1)
+                logs[container_name] = {instance_id: running_container.logs().decode()}
+    
+    return logs
