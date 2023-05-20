@@ -574,11 +574,7 @@ class SnowparkPythonUDFOperator(PythonVirtualenvOperator, _BaseSnowparkOperator)
         expect_airflow: bool = True,
         **kwargs,
     ):
-        if python_version and python_version not in _SUPPORTED_SNOWPARK_PYTHON_VERSIONS:
-            raise AirflowException(
-                f"Requested python version {python_version} "
-                f"not in supported versions: {_SUPPORTED_SNOWPARK_PYTHON_VERSIONS} "
-                )
+
         
         self.snowflake_conn_id = snowflake_conn_id or conn_id or "snowflake_default"
 

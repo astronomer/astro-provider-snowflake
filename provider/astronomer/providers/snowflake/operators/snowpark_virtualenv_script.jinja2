@@ -1,24 +1,28 @@
 import {{ pickling_library }}
 import sys
-from airflow.exceptions import AirflowException
 try:
     from snowflake.snowpark import Session as SnowparkSession
     from snowflake.snowpark import functions as F
     from snowflake.snowpark import types as T
 except: 
-    raise AirflowException('Snowpark libraries are not installed in the environment.')
+    raise Exception('Snowpark libraries are not installed in the environment.')
+
 try:
     from astro.sql.table import Table, TempTable
 except: 
     Table = TempTable = None
-from astronomer.providers.snowflake import SnowparkTable
+
+try: 
+    from astronomer.providers.snowflake import SnowparkTable
+except: 
+    SnowparkTable = None
 
 snowpark_session = SnowparkSession.builder.configs({{conn_params}}).create()
 snowflake_conn_id = '{{snowflake_conn_id}}'
 
 def _is_table_arg(arg) -> bool:
-    if ((Table != None or TempTable != None) and isinstance(arg, (Table, TempTable))) \
-            or isinstance(arg, SnowparkTable):
+    if ((Table or TempTable) and isinstance(arg, (Table, TempTable))) \
+            or (SnowparkTable and isinstance(arg, SnowparkTable)):
         return True
     else:
         return False
