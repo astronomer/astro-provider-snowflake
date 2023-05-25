@@ -1,21 +1,23 @@
 from __future__ import annotations
 import jinja2
 import os
-from typing_extensions import Any
 import sys
 from textwrap import dedent
 import inspect
-from typing import Any, Callable, Collection, Iterable, Mapping, Sequence, Container
+from typing import Any, Callable, Collection, Iterable, Mapping, Sequence, Container, TYPE_CHECKING
 import subprocess
 from pathlib import Path
+
+from airflow.utils.context import Context, context_copy_partial
+if TYPE_CHECKING:
+    from airflow.utils.context import Context
 
 from airflow.utils.process_utils import execute_in_subprocess
 from airflow.utils.decorators import remove_task_decorator
 from airflow.operators.python import (
     _BasePythonVirtualenvOperator, 
     PythonVirtualenvOperator, 
-    ExternalPythonOperator,
-    PythonOperator
+    ExternalPythonOperator
 )
 from airflow.exceptions import (
     AirflowException,
@@ -24,51 +26,18 @@ from airflow.exceptions import (
 
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
 from astronomer.providers.snowflake import SnowparkTable
+from astronomer.providers.snowflake.xcom_backends.snowflake import _try_parse_snowflake_xcom_uri
 
 try:
     from astro.sql.table import Table, TempTable
 except:
     Table = None    # type: ignore
-    TempTable = None
+    TempTable = None # type: ignore
 
 try:
     from snowflake.snowpark import Session as SnowparkSession
 except ImportError:
     SnowparkSession = None  # type: ignore
-
-def get_snowflake_conn_params(operator:Any) -> dict:
-    """
-    Resolves snowflake connection parameters.
-
-    Conn params may come from the hook or set in the operator/decorator.
-    Some params (ie. warehouse, database, schema, etc) can be None as these are set in Snowflake defaults.
-    Some regions (ie. us-west-2) do not except a region param.  Account must be fully qualified instead.
-    Table or SnowparkTable class can also override this in get_fq_table_name()
-
-    """
-
-    #Start with params that come with the Snowflake hook
-    conn_params = SnowflakeHook(snowflake_conn_id=operator.snowflake_conn_id)._get_conn_params()
-
-    if conn_params['region'] in [None, '']:
-        parse_logic = len(conn_params['account'].split('.')) > 3 or len(conn_params['account'].split('-')) >= 2
-        assert parse_logic, "Snowflake Region not set and account name is not fully-qualified."
-
-    #replace with any that come from the operator at runtime
-    if operator.warehouse:
-        conn_params['warehouse'] = operator.warehouse
-    if operator.database:
-        conn_params['database'] = operator.database
-    if operator.schema:
-        conn_params['schema'] = operator.schema
-    if operator.role:
-        conn_params['role'] = operator.role
-    if operator.authenticator:
-        conn_params['authenticator'] = operator.authenticator
-    if operator.session_parameters:
-        conn_params['session_parameters'] = operator.session_parameters
-
-    return conn_params
 
 class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
     """
@@ -84,6 +53,34 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
     :param snowflake_conn_id: A Snowflake connection name.  Default 'snowflake_default'
     :param python_callable: A python function with no references to outside variables,
         defined with def, which will be run in a virtualenv.
+    :param temp_data_output: If set to 'stage' or 'table' Snowpark DataFrame objects returned
+        from the operator will be serialized to the stage specified by 'temp_data_stage' or
+        a table with prefix 'temp_data_table_prefix'.
+    :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the database set at the operator or hook level.  If None, 
+        the operator will assume a default database is set in the Snowflake user preferences.
+    :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the schema set at the operator or hook level.  If None, 
+        the operator will assume a default schema is set in the Snowflake user preferences.
+    :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
+        must be set if temp_data_output == 'stage'.  Output location will be named for the task:
+        <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
+        
+        and a uri will be returned to Airflow xcom:
+        
+        snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
+
+    :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
+        must be set if temp_data_output == 'table'. Default: "XCOM_"
+
+        Output table will be named for the task:
+        <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
+
+        and the return value set to a SnowparkTable object with the fully-qualified table name.
+        
+        SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
+
+    :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
     :param use_dill: Whether to use dill to serialize
         the args and result (pickle is default). This allow more complex types
         but requires you to include dill in your requirements.
@@ -108,6 +105,12 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         *,
         python_callable: Callable,
         snowflake_conn_id: str = "snowflake_default",
+        temp_data_output: str = None,
+        temp_data_db: str = None,
+        temp_data_schema: str = None,
+        temp_data_stage: str = None,
+        temp_data_table_prefix: str = 'XCOM_',
+        temp_data_overwrite: bool = False,
         use_dill: bool = False,
         op_args: Collection[Any] | None = None,
         op_kwargs: Mapping[str, Any] | None = None,
@@ -127,6 +130,19 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         self.schema = kwargs.pop('schema', None)
         self.authenticator = kwargs.pop('authenticator', None)
         self.session_parameters = kwargs.pop('session_parameters', None)
+        self.conn_params = self.get_snowflake_conn_params()
+
+        self.temp_data_dict = {
+            'temp_data_output': temp_data_output,
+            'temp_data_db': temp_data_db,
+            'temp_data_schema': temp_data_schema,
+            'temp_data_stage': temp_data_stage,
+            'temp_data_table_prefix': temp_data_table_prefix,
+            'temp_data_overwrite': temp_data_overwrite
+        }
+    
+        if temp_data_output == 'stage':
+            assert temp_data_stage, "temp_data_stage must be specified if temp_data_output='stage'"
 
         super().__init__(
             python_callable=python_callable,
@@ -142,6 +158,290 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
             **kwargs,
         )
     
+    def get_snowflake_conn_params(self) -> dict:
+        """
+        Resolves snowflake connection parameters.
+
+        Conn params may come from the hook or set in the operator/decorator.
+        Some params (ie. warehouse, database, schema, etc) can be None as these are set in Snowflake defaults.
+        Some regions (ie. us-west-2) do not except a region param.  Account must be fully qualified instead.
+        Table or SnowparkTable class can also override this in get_fq_table_name()
+
+        """
+
+        #Start with params that come with the Snowflake hook
+        conn_params = SnowflakeHook(snowflake_conn_id=self.snowflake_conn_id)._get_conn_params()
+
+        if conn_params['region'] in [None, '']:
+            parse_logic = len(conn_params['account'].split('.')) > 3 or len(conn_params['account'].split('-')) >= 2
+            assert parse_logic, "Snowflake Region not set and account name is not fully-qualified."
+
+        #replace with any that come from the operator at runtime
+        if self.warehouse:
+            conn_params['warehouse'] = self.warehouse
+        if self.database:
+            conn_params['database'] = self.database
+        if self.schema:
+            conn_params['schema'] = self.schema
+        if self.role:
+            conn_params['role'] = self.role
+        if self.authenticator:
+            conn_params['authenticator'] = self.authenticator
+        if self.session_parameters:
+            conn_params['session_parameters'] = self.session_parameters
+
+        return conn_params
+    
+    #This function is part of the snowpark jinja template and will be inserted into the callable script.
+    def _is_table_arg(arg):
+        if ((Table or TempTable) and isinstance(arg, (Table, TempTable))) \
+                or (SnowparkTable and isinstance(arg, SnowparkTable)):
+            arg=arg.to_json()
+
+        if isinstance(arg, dict) and arg.get("class", "") in ["SnowparkTable", "Table", "TempTable"]:
+            # assert arg['conn_id'] and SnowflakeHook(conn_id=arg['conn_id']).conn_type == 'snowflake', f"No connection specified for {arg.get('class')} {arg['name']}"
+            if len(arg['name'].split('.')) == 3:
+                return arg['name']
+            elif len(arg['name'].split('.')) == 1:
+                database = arg['metadata'].get('database') \
+                                or conn_params['database'] \
+                                or snowpark_session.get_current_database().replace("\"","")
+                assert database, "SnowparkTable object provided without database or user default."
+
+                schema = arg['metadata'].get('schema') \
+                            or conn_params['schema'] \
+                            or snowpark_session.get_current_schema().replace("\"","")
+                assert schema, "SnowparkTable object provided without schema or user default."
+
+                return f"{database}.{schema}.{arg['name']}"
+            else:
+                raise Exception("SnowparkTable name must be fully-qualified or tablename only.")
+        else:
+            return False
+    
+    #This function is part of the snowpark jinja template and will be inserted into the callable script.
+    def _deserialize_snowpark_args(arg:Any):
+        table_name = _is_table_arg(arg)
+        uri = _try_parse_snowflake_xcom_uri(arg)
+
+        if table_name:
+            return snowpark_session.table(table_name)
+        
+        elif uri and uri['xcom_stage'] and uri['xcom_key'].split('.')[-1] == 'parquet': 
+            return snowpark_session.read.parquet(f"@{uri['xcom_stage']}/{uri['xcom_key']}")
+        
+        elif isinstance(arg, dict):
+            for k, v in arg.items():
+                table_name = _is_table_arg(v)
+                uri = _try_parse_snowflake_xcom_uri(v)
+                if table_name:
+                    arg[k] = snowpark_session.table(table_name)
+                elif uri and uri['xcom_stage'] and uri['xcom_key'].split('.')[-1] == 'parquet': 
+                    arg[k] = snowpark_session.read.parquet(f"@{uri['xcom_stage']}/{uri['xcom_key']}")
+                elif isinstance(v, (dict)):
+                    _deserialize_snowpark_args(arg.get(k, {}))
+                elif isinstance(v, (list)):
+                    arg[k] = _deserialize_snowpark_args(arg.get(k, []))
+        elif isinstance(arg, list):
+            return [_deserialize_snowpark_args(item) for item in arg]
+        else:
+            return arg
+        
+    #This function is part of the snowpark jinja template and will be inserted into the callable script.
+    # def _deserialize_snowpark_args(arg_dict:dict) -> dict:
+
+        #If using the Snowflake XCOM backend snowpark dataframes serialized to stages would have already been parsed and deserialized.  
+        #If not using the XCOM backend we need to deserialize the uri to a Snowpark Dataframe.
+
+        # new_arg_dict={'args':[], 'kwargs':{}}
+
+        #instantiate Table and SnowparkTable args as Snowpark dataframes
+        # for arg in arg_dict['args']:
+        #     uri = _try_parse_snowflake_xcom_uri(arg)
+        #     table_name = _is_table_arg(arg)
+
+        #     if uri and uri['xcom_stage'] and uri['xcom_key'].split('.')[-1] == 'parquet': 
+        #         new_arg_dict['args'].append(snowpark_session.read.parquet(f"@{uri['xcom_stage']}/{uri['xcom_key']}"))
+        #     elif table_name:
+        #         new_arg_dict['args'].append(snowpark_session.table(table_name))
+        #     else:
+        #         new_arg_dict['args'].append(arg)
+
+        # for arg_name, arg in arg_dict['kwargs'].items():
+        #     uri = _try_parse_snowflake_xcom_uri(arg)
+        #     table_name = _is_table_arg(arg)
+
+        #     if uri and uri['xcom_stage'] and uri['xcom_key'].split('.')[-1] == 'parquet': 
+        #         new_arg_dict['kwargs'][arg_name] = snowpark_session.read.parquet(f"@{uri['xcom_stage']}/{uri['xcom_key']}")
+        #     elif table_name:
+        #         new_arg_dict['kwargs'][arg_name] = snowpark_session.table(table_name)
+        #     else:
+        #         new_arg_dict['kwargs'][arg_name] = arg
+
+        # return new_arg_dict
+    
+    #This function is part of the snowpark jinja template and will be inserted into the callable script.
+    def _write_snowpark_dataframe(spdf:Snowpark_DataFrame, multi_index:int):
+        try:
+            database = temp_data_dict.get('temp_data_db') or snowpark_session.get_current_database().replace("\"","")
+            schema = temp_data_dict.get('temp_data_schema') or snowpark_session.get_current_schema().replace("\"","")
+        except: 
+            assert database and schema, "To serialize Snowpark dataframes the database and schema must be set in temp_data params, operator/decorator, hook or Snowflake user session defaults."
+        
+        if conn_params['region']:
+            base_uri = f"snowflake://{conn_params['account']}.{conn_params['region']}?"
+        else:
+            base_uri = f"snowflake://{conn_params['account']}?"
+
+
+        if temp_data_dict['temp_data_output'] == 'stage':
+            """
+            Save to stage <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID> 
+            and return uri
+            snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
+            """
+
+            stage_name = f"{temp_data_dict['temp_data_stage']}".upper()
+            fq_stage_name = f"{database}.{schema}.{stage_name}".upper()
+            assert len(fq_stage_name.split('.')) == 3, "stage for snowpark dataframe serialization is not fully-qualified"
+            
+            uri = f"{base_uri}&stage={fq_stage_name}&key={dag_id}/{task_id}/{run_id}/{multi_index}/return_value.parquet"
+
+            spdf.write.copy_into_location(file_format_type="parquet",
+                                        overwrite=temp_data_dict['temp_data_overwrite'],
+                                        header=True, 
+                                        single=True,
+                                        location=f"{fq_stage_name}/{dag_id}/{task_id}/{run_id}/{multi_index}/return_value.parquet")
+
+            return uri
+
+        elif temp_data_dict['temp_data_output'] == 'table':
+            """
+            Save to table <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
+            and return SnowparkTable object
+            SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
+            """
+            table_name = f"{temp_data_dict['temp_data_table_prefix'] or ''}{dag_id}__{task_id.replace('.','_')}__{ts_nodash}__{multi_index}".upper()
+            fq_table_name = f"{database}.{schema}.{table_name}".upper()
+            assert len(fq_table_name.split('.')) == 3, "table for snowpark dataframe serialization is not fully-qualified"
+
+            if temp_data_dict['temp_data_overwrite']:
+                mode = 'overwrite'
+            else:
+                mode = 'errorifexists'
+
+            spdf.write.save_as_table(fq_table_name, mode=mode)
+
+            return SnowparkTable(name=table_name, 
+                                 conn_id=snowflake_conn_id, 
+                                 metadata={'schema': schema, 'database': database}) #.to_json()
+        else:
+            raise Exception("temp_data_output must be one of 'stage' | 'table' | None")
+
+    #This function is part of the snowpark jinja template and will be inserted into the callable script.
+    def _serialize_snowpark_results(res:Any, multi_index:int):
+        if temp_data_dict.get('temp_data_output') in ['stage', 'table']:
+            if isinstance(res, Snowpark_DataFrame): 
+                return _write_snowpark_dataframe(res, multi_index)
+            if isinstance(res, dict):
+                for k, v in res.items():
+                    if isinstance(v, Snowpark_DataFrame):
+                        res[k] = _write_snowpark_dataframe(v, multi_index)
+                    elif isinstance(v, (dict)):
+                        _serialize_snowpark_results(res.get(k, {}), multi_index)
+                    elif isinstance(v, (list)):
+                        res[k] = _serialize_snowpark_results(res.get(k, []), multi_index)
+                    multi_index+=1
+            elif isinstance(res, (list, tuple)):
+                tmp = []
+                for item in res:
+                    tmp.append(_serialize_snowpark_results(item, multi_index))
+                    multi_index+=1
+                return tmp
+                # return [_serialize_snowpark_results(item) for item in res]
+            else:
+                return res
+    
+    # def _write_snowpark_dataframe(spdf:Snowpark_DataFrame, multi_index:int):
+    #     try:
+    #         conn_params['database'] = temp_data_dict.get('temp_data_db') or snowpark_session.get_current_database().replace("\"","")
+    #         conn_params['schema'] = temp_data_dict.get('temp_data_schema') or snowpark_session.get_current_schema().replace("\"","")
+    #     except: 
+    #         assert conn_params['database'] and conn_params['schema'], "To serialize Snowpark dataframes the database and schema must be set in temp_data params, operator/decorator, hook or Snowflake user session defaults."
+        
+    #     if conn_params['region']:
+    #         base_uri = f"snowflake://{conn_params['account']}.{conn_params['region']}?"
+    #     else:
+    #         base_uri = f"snowflake://{conn_params['account']}?"
+
+
+    #     if temp_data_dict['temp_data_output'] == 'stage':
+    #         """
+    #         Save to stage <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID> 
+    #         and return uri
+    #         snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
+    #         """
+
+    #         stage_name = f"{temp_data_dict['temp_data_stage']}".upper()
+    #         fq_stage_name = f"{conn_params['database']}.{conn_params['schema']}.{stage_name}".upper()
+    #         assert len(fq_stage_name.split('.')) == 3, "stage for snowpark dataframe serialization is not fully-qualified"
+            
+    #         uri = f"{base_uri}&stage={fq_stage_name}&key={dag_id}/{task_id}/{run_id}/{multi_index}/return_value.parquet"
+
+    #         spdf.write.copy_into_location(file_format_type="parquet",
+    #                                     overwrite=temp_data_dict['temp_data_overwrite'],
+    #                                     header=True, 
+    #                                     single=True,
+    #                                     location=f"{fq_stage_name}/{dag_id}/{task_id}/{run_id}/{multi_index}/return_value.parquet")
+
+    #         return uri
+
+    #     elif temp_data_dict['temp_data_output'] == 'table':
+    #         """
+    #         Save to table <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
+    #         and return SnowparkTable object
+    #         SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
+    #         """
+    #         table_name = f"{temp_data_dict['temp_data_table_prefix'] or ''}{dag_id}__{task_id.replace('.','_')}__{ts_nodash}__{multi_index}".upper()
+    #         fq_table_name = f"{conn_params['database']}.{conn_params['schema']}.{table_name}".upper()
+    #         assert len(fq_table_name.split('.')) == 3, "table for snowpark dataframe serialization is not fully-qualified"
+
+    #         if temp_data_dict['temp_data_overwrite']:
+    #             mode = 'overwrite'
+    #         else:
+    #             mode = 'errorifexists'
+
+    #         spdf.write.save_as_table(fq_table_name, mode=mode)
+
+    #         return SnowparkTable(name=table_name, 
+    #                              conn_id=snowflake_conn_id, 
+    #                              metadata={'schema': conn_params['schema'], 'database': conn_params['database']}) #.to_json()
+    #     else:
+    #         raise Exception("temp_data_output must be one of 'stage' | 'table' | None")
+
+    # #This function is part of the snowpark jinja template and will be inserted into the callable script.
+    # def _serialize_snowpark_results(res):
+    #     if temp_data_dict.get('temp_data_output') in ['stage','table']:
+    #         multi_index = 0
+    #         if isinstance(res, dict):
+    #             for return_key, return_value in res.items():
+    #                 if isinstance(return_value, Snowpark_DataFrame):
+    #                     res[return_key] = _write_snowpark_dataframe(return_value, multi_index)
+    #                     multi_index+=1
+    #         elif isinstance(res, (list, tuple, set)):
+    #             new_res = []
+    #             for return_value in res:
+    #                 if isinstance(return_value, Snowpark_DataFrame):
+    #                     new_res.append(_write_snowpark_dataframe(return_value, multi_index))
+    #                     multi_index+=1
+    #                 else:
+    #                     new_res.append(return_value)
+    #             res = type(res)(new_res)
+    #         elif isinstance(res, Snowpark_DataFrame):
+    #                 res = _write_snowpark_dataframe(res, multi_index)
+
+    #     return res
+
     def get_python_source(self):
         raw_source = inspect.getsource(self.python_callable)
         res = dedent(raw_source)
@@ -175,6 +475,15 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         template = template_env.get_template("snowpark_virtualenv_script.jinja2")
         template.stream(**jinja_context).dump(filename)
 
+    def execute(self, context: Context) -> Any:
+        # serializable_keys = set(super()._iter_serializable_context_keys())
+        # serializable_context = context_copy_partial(context, serializable_keys)
+
+        self.run_id = context['run_id']
+        self.ts_nodash = context['ts_nodash']
+
+        return super().execute(context=context) #serializable_context)
+
     def _execute_python_callable_in_subprocess(self, python_path: Path, tmp_dir: Path):
         op_kwargs: dict[str, Any] = {k: v for k, v in self.op_kwargs.items()}
         if self.templates_dict:
@@ -185,10 +494,26 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         script_path = tmp_dir / "script.py"
         self._write_args(input_path)
         self._write_string_args(string_args_path)
+
+        print('###################')
+        print(self.op_args)
+        print(self.op_kwargs)
+        print('###################')
+
         self.write_python_script(
             jinja_context=dict(
-                conn_params=get_snowflake_conn_params(self),
+                conn_params=self.get_snowflake_conn_params(),
                 snowflake_conn_id=self.snowflake_conn_id,
+                temp_data_dict=self.temp_data_dict,
+                dag_id=self.dag_id,
+                task_id=self.task_id,
+                run_id=self.run_id,
+                ts_nodash=self.ts_nodash,
+                try_parse_snowflake_xcom_uri_func = dedent(inspect.getsource(_try_parse_snowflake_xcom_uri)),
+                is_table_arg_func = dedent(inspect.getsource(self._is_table_arg)),
+                deserialize_snowpark_args_func = dedent(inspect.getsource(self._deserialize_snowpark_args)),
+                write_snowpark_dataframe_func = dedent(inspect.getsource(self._write_snowpark_dataframe)),
+                serialize_snowpark_results_func = dedent(inspect.getsource(self._serialize_snowpark_results)),
                 op_args=self.op_args,
                 op_kwargs=op_kwargs,
                 expect_airflow=self.expect_airflow,
@@ -197,8 +522,10 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
                 python_callable_source=self.get_python_source(),
             ),
             filename=os.fspath(script_path),
-            render_template_as_native_obj=self.dag.render_template_as_native_obj,
+            render_template_as_native_obj=False,
         )
+
+        print(script_path.read_text())
 
         try:
             execute_in_subprocess(
@@ -602,3 +929,277 @@ class SnowparkPythonUDFOperator(PythonVirtualenvOperator, _BaseSnowparkOperator)
 
         return 
     
+     
+
+
+def test():
+    import pandas as pd
+    from astronomer.providers.snowflake.xcom_backends.snowflake import SnowflakeXComBackend
+    
+    from snowflake.snowpark import DataFrame as Snowpark_DataFrame
+    from snowflake.snowpark import Session as SnowparkSession
+    from snowflake.snowpark import functions as F
+    from snowflake.snowpark import types as T
+
+    import pickle
+    import sys
+    try:
+        from snowflake.snowpark import Session as SnowparkSession
+        from snowflake.snowpark import functions as F
+        from snowflake.snowpark import types as T
+    except: 
+        raise Exception('Snowpark libraries are not installed in the environment.')
+
+    try:
+        from astro.sql.table import Table, TempTable
+    except: 
+        Table = TempTable = None
+
+    try: 
+        from astronomer.providers.snowflake import SnowparkTable
+    except: 
+        SnowparkTable = None
+
+    from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
+
+    from astronomer.providers.snowflake.operators.snowpark import SnowparkVirtualenvOperator
+
+    conn_params = SnowflakeHook()._get_conn_params()
+    # conn_params['database']=None
+    # conn_params['schema']=None
+
+    snowpark_session = SnowparkSession.builder.configs(conn_params).create()
+
+    temp_data_dict = {
+            'temp_data_output': 'stage',
+            'temp_data_db': 'sissyg',
+            'temp_data_schema': 'demo',
+            'temp_data_stage': 'xcom_stage',
+            'temp_data_table_prefix': 'XCOM__',
+            'temp_data_overwrite': True
+        }
+    dag_id='customer_analytics'
+    task_id='score_sentiment.call_sentiment'
+    run_id='manual__2023-05-23T07:40:44.577105+00:00'
+    ts_nodash = '20230523T074044'
+
+    spdf = snowpark_session.table('SISSYG.DEMO.STG_AD_SPEND')
+    
+    temp_data_dict['temp_data_output']=None
+    spdf = snowpark_session.table('SISSYG.DEMO.STG_AD_SPEND')
+    assert spdf == process_snowpark_results(spdf)
+
+    temp_data_dict['temp_data_output']='table'
+    spdf = snowpark_session.table('SISSYG.DEMO.STG_AD_SPEND')
+    res = process_snowpark_results(spdf)
+    assert (spdf.to_pandas() == snowpark_session.table(f'{res.metadata.database}.{res.metadata.schema}.{res.name}').to_pandas()).values.argmax() == 0
+
+    temp_data_dict['temp_data_output']='stage'
+    spdf = snowpark_session.table('SISSYG.DEMO.STG_AD_SPEND')
+    res = process_snowpark_results(spdf)
+    assert (spdf.to_pandas() == SnowflakeXComBackend()._deserialize(uri=res)).values.argmax() == 0
+
+    temp_data_dict['temp_data_output']='table'
+    spdf = (snowpark_session.table('SISSYG.DEMO.STG_AD_SPEND'), snowpark_session.table('SISSYG.DEMO.STG_CUSTOMERS'))
+    process_snowpark_results(spdf)
+    
+    spdf = [snowpark_session.table('SISSYG.DEMO.STG_AD_SPEND'), snowpark_session.table('SISSYG.DEMO.STG_CUSTOMERS')]
+    process_snowpark_results(spdf)
+
+    spdf = {'df1': snowpark_session.table('SISSYG.DEMO.STG_AD_SPEND'), 'df2': snowpark_session.table('SISSYG.DEMO.STG_CUSTOMERS')}
+    process_snowpark_results(spdf)
+
+    temp_data_dict['temp_data_output']='stage'
+    spdf = (snowpark_session.table('SISSYG.DEMO.STG_AD_SPEND'), snowpark_session.table('SISSYG.DEMO.STG_CUSTOMERS'))
+    res = process_snowpark_results(spdf)
+    for i in zip(spdf, res):
+        assert (i[0].to_pandas() == SnowflakeXComBackend()._deserialize(uri=i[1])).values.argmax() == 0
+    assert type(res) == type(spdf)
+        
+    spdf = [snowpark_session.table('SISSYG.DEMO.STG_AD_SPEND'), snowpark_session.table('SISSYG.DEMO.STG_CUSTOMERS')]
+    res = process_snowpark_results(spdf)
+    for i in zip(spdf, res):
+        assert (i[0].to_pandas() == SnowflakeXComBackend()._deserialize(uri=i[1])).values.argmax() == 0
+    assert type(res) == type(spdf)
+    {'df': df, 'df1': df1, 'mystr': 'success', 'dfs': {'d2': df2, 'df8': df8, 'df9': df9} }
+    spdf = {'df1': snowpark_session.table('SISSYG.DEMO.STG_AD_SPEND'), 'df2': snowpark_session.table('SISSYG.DEMO.STG_CUSTOMERS')}
+    res = process_snowpark_results(spdf.copy())
+    for i in zip(spdf.values(), res.values()):
+        assert (i[0].to_pandas() == SnowflakeXComBackend()._deserialize(uri=i[1])).values.argmax() == 0
+    assert type(res) == type(spdf)
+
+    
+    test_arg1='snowflake://FY02423-SNOWSERVICES_PREVIEW?&stage=SISSYG.DEMO.XCOM_STAGE&key=snowpark_test_dag/SPtask/manual__2023-05-23T16:42:51.112381+00:00/0/return_value.parquet'
+    test_arg2=SnowparkTable(name='XCOM__CUSTOMER_ANALYTICS__SCORE_SENTIMENT_CALL_SENTIMENT__20230523T074044', conn_id='snowflake_default', metadata={'schema': 'demo', 'database': 'sissyg'})
+    test_arg4=SnowparkTable(name='sissyg.demo.XCOM__CUSTOMER_ANALYTICS__SCORE_SENTIMENT_CALL_SENTIMENT__20230523T074044', conn_id='snowflake_default').to_json()
+    test_arg3={'class': 'SnowparkTable', 'name': 'XCOM_SNOWPARK_TEST_DAG__SPTASK__20230524T104305__0', 'metadata': {'schema': 'DEMO', 'database': 'SISSYG'}, 'conn_id': 'snowflake_default'}
+
+    def _write_snowpark_dataframe(spdf:Snowpark_DataFrame, multi_index:int):
+        try:
+            database = temp_data_dict.get('temp_data_db') or snowpark_session.get_current_database().replace("\"","")
+            schema = temp_data_dict.get('temp_data_schema') or snowpark_session.get_current_schema().replace("\"","")
+        except: 
+            assert database and schema, "To serialize Snowpark dataframes the database and schema must be set in temp_data params, operator/decorator, hook or Snowflake user session defaults."
+        
+        if conn_params['region']:
+            base_uri = f"snowflake://{conn_params['account']}.{conn_params['region']}?"
+        else:
+            base_uri = f"snowflake://{conn_params['account']}?"
+
+
+        if temp_data_dict['temp_data_output'] == 'stage':
+            """
+            Save to stage <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID> 
+            and return uri
+            snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
+            """
+
+            stage_name = f"{temp_data_dict['temp_data_stage']}".upper()
+            fq_stage_name = f"{database}.{schema}.{stage_name}".upper()
+            assert len(fq_stage_name.split('.')) == 3, "stage for snowpark dataframe serialization is not fully-qualified"
+            
+            uri = f"{base_uri}&stage={fq_stage_name}&key={dag_id}/{task_id}/{run_id}/{multi_index}/return_value.parquet"
+
+            # spdf.write.copy_into_location(file_format_type="parquet",
+            #                             overwrite=temp_data_dict['temp_data_overwrite'],
+            #                             header=True, 
+            #                             single=True,
+            #                             location=f"{fq_stage_name}/{dag_id}/{task_id}/{run_id}/{multi_index}/return_value.parquet")
+
+            return uri
+
+        elif temp_data_dict['temp_data_output'] == 'table':
+            """
+            Save to table <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
+            and return SnowparkTable object
+            SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
+            """
+            table_name = f"{temp_data_dict['temp_data_table_prefix'] or ''}{dag_id}__{task_id.replace('.','_')}__{ts_nodash}__{multi_index}".upper()
+            fq_table_name = f"{database}.{schema}.{table_name}".upper()
+            assert len(fq_table_name.split('.')) == 3, "table for snowpark dataframe serialization is not fully-qualified"
+
+            if temp_data_dict['temp_data_overwrite']:
+                mode = 'overwrite'
+            else:
+                mode = 'errorifexists'
+
+            # spdf.write.save_as_table(fq_table_name, mode=mode)
+
+            return SnowparkTable(name=table_name, 
+                                 conn_id=snowflake_conn_id, 
+                                 metadata={'schema': schema, 'database': database}) #.to_json()
+        else:
+            raise Exception("temp_data_output must be one of 'stage' | 'table' | None")
+
+    def _serialize_snowpark_results(res:Any, multi_index:int):
+        if temp_data_dict.get('temp_data_output') in ['stage', 'table']:
+            if isinstance(res, Snowpark_DataFrame): 
+                return _write_snowpark_dataframe(res, multi_index)
+            if isinstance(res, dict):
+                for k, v in res.items():
+                    if isinstance(v, Snowpark_DataFrame):
+                        res[k] = _write_snowpark_dataframe(v, multi_index)
+                    elif isinstance(v, (dict)):
+                        _serialize_snowpark_results(res.get(k, {}), multi_index)
+                    elif isinstance(v, (list)):
+                        res[k] = _serialize_snowpark_results(res.get(k, []), multi_index)
+                    multi_index+=1
+            elif isinstance(res, list):
+                tmp = []
+                for item in res:
+                    tmp.append(_serialize_snowpark_results(item, multi_index))
+                    multi_index+=1
+                return tmp
+                # return [_serialize_snowpark_results(item) for item in res]
+            else:
+                return res
+
+    temp_data_dict ['temp_data_output']='stage'
+    # res = {'df2': snowpark_session.table(test_arg2.name), 'df3': snowpark_session.table(test_arg3['name']), 'mystr': 'success', 'dfs': {'d2': snowpark_session.table(test_arg2.name), 'df8': snowpark_session.table(test_arg4['name'])} }
+    # res = {'df2': snowpark_session.table(test_arg2.name), 'df4': snowpark_session.table(test_arg4['name'])}
+    res = [snowpark_session.table(test_arg2.name), snowpark_session.table(test_arg4['name']), 'string1']
+    res = ['string1']
+    res = 'string1'
+    res = snowpark_session.table(test_arg2.name)
+
+    if isinstance(res, dict):
+        _serialize_snowpark_results(res, 0)
+    else:
+        res = _serialize_snowpark_results(res, 0)
+    res
+
+    
+    ###WORKS####
+    # arg_dict={'args': [test_arg1, test_arg2, 'string', dict(), list(), pd.DataFrame()], 'kwargs': {'df1': test_arg2, 'df2': test_arg1}, 'df3': pd.DataFrame()}
+    # def _deserialize_snowpark_args(arg:Any):
+    #     table_name = _is_table_arg(arg)
+    #     uri = _try_parse_snowflake_xcom_uri(arg)
+
+    #     if table_name:
+    #         return snowpark_session.table(table_name)
+        
+    #     elif uri and uri['xcom_stage'] and uri['xcom_key'].split('.')[-1] == 'parquet': 
+    #         return snowpark_session.read.parquet(f"@{uri['xcom_stage']}/{uri['xcom_key']}")
+        
+    #     elif isinstance(arg, dict):
+    #         for k, v in arg.items():
+    #             table_name = _is_table_arg(v)
+    #             uri = _try_parse_snowflake_xcom_uri(v)
+    #             if table_name:
+    #                 arg[k] = snowpark_session.table(table_name)
+    #             elif uri and uri['xcom_stage'] and uri['xcom_key'].split('.')[-1] == 'parquet': 
+    #                 arg[k] = snowpark_session.read.parquet(f"@{uri['xcom_stage']}/{uri['xcom_key']}")
+    #             elif isinstance(v, (dict)):
+    #                 _deserialize_snowpark_args(arg.get(k, {}))
+    #             elif isinstance(v, (list)):
+    #                 arg[k] = _deserialize_snowpark_args(arg.get(k, []))
+    #     elif isinstance(arg, list):
+    #         return [_deserialize_snowpark_args(item) for item in arg]
+    #     else:
+    #         return arg
+        
+    # arg_dict={'args': [test_arg1, test_arg2, 'string1', {'x','y'}, [[['a','b']]], pd.DataFrame()], 'kwargs': {'df1': test_arg1, 'df2': test_arg2, 'df3': test_arg3, 'df': pd.DataFrame(['x'])}}
+    # _deserialize_snowpark_args(arg_dict)
+    # arg_dict
+
+
+    # ######WORKS#######
+    # def deserialize(obj):
+    #     # print(f"{obj=}")
+    #     if table_name := _is_table_arg(obj):
+    #         return 'TABLE'
+    #     elif uri := _try_parse_snowflake_xcom_uri(obj):
+    #         return 'URI'
+    #     elif isinstance(obj, dict):
+    #         for k, v in obj.items():
+    #             if table_name := _is_table_arg(v):
+    #                 obj[k] = 'TABLE'
+    #             elif uri := _try_parse_snowflake_xcom_uri(v):
+    #                 obj[k] = 'URI'
+    #             elif isinstance(v, (dict)):
+    #                 deserialize(obj.get(k, {}))
+    #                 # deserialize(v)
+    #             elif isinstance(v, (list)):
+    #                 obj[k] = deserialize(obj.get(k, []))
+    #                 # obj[k] = deserialize(v)
+    #     elif isinstance(obj, list):
+    #         return [deserialize(item) for item in obj]
+    #     else:
+    #         return obj
+    
+    # arg_dict={'args': [test_arg1, test_arg2, 'string1', {'x','y'}, [[['a','b']]], pd.DataFrame()], 'kwargs': {'df1': test_arg1, 'df2': test_arg2, 'df3': test_arg3, 'df': pd.DataFrame(['x'])}}
+    # deserialize(arg_dict)
+    # arg_dict
+    
+    # import collections
+
+    # def update(orig_dict, new_dict):
+    #     for key, val in new_dict.iteritems():
+    #         if isinstance(val, collections.abc.Mapping):
+    #             tmp = update(orig_dict.get(key, { }), val)
+    #             orig_dict[key] = tmp
+    #         elif isinstance(val, list):
+    #             orig_dict[key] = (orig_dict.get(key, []) + val)
+    #         else:
+    #             orig_dict[key] = new_dict[key]
+    #     return orig_dict

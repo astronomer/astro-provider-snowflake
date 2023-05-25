@@ -1,6 +1,12 @@
 import {{ pickling_library }}
 import sys
+import pandas as pd
+import numpy as np
+from urllib import parse as parser
+from typing import Any, Iterable
+
 try:
+    from snowflake.snowpark import DataFrame as Snowpark_DataFrame
     from snowflake.snowpark import Session as SnowparkSession
     from snowflake.snowpark import functions as F
     from snowflake.snowpark import types as T
@@ -17,16 +23,16 @@ try:
 except: 
     SnowparkTable = None
 
-snowpark_session = SnowparkSession.builder.configs({{conn_params}}).create()
-snowflake_conn_id = '{{snowflake_conn_id}}'
+conn_params = {{ conn_params }}
+snowflake_conn_id = '{{ snowflake_conn_id }}'
+temp_data_dict = {{ temp_data_dict }}
+dag_id = '{{ dag_id }}'
+task_id = '{{ task_id }}'
+run_id = '{{ run_id }}'
+ts_nodash = '{{ ts_nodash }}'
 
-def _is_table_arg(arg) -> bool:
-    if ((Table or TempTable) and isinstance(arg, (Table, TempTable))) \
-            or (SnowparkTable and isinstance(arg, SnowparkTable)):
-        return True
-    else:
-        return False
-        
+snowpark_session = SnowparkSession.builder.configs(conn_params).create()
+
 {% if expect_airflow %}
  {# Check whether Airflow is available in the environment.
  # If it is, we'll want to ensure that we integrate any macros that are being provided
@@ -42,27 +48,17 @@ if sys.version_info >= (3,6):
 {% endif %}
 
 {% if op_args or op_kwargs %}
+{{ try_parse_snowflake_xcom_uri_func }}
+{{ is_table_arg_func }}
+{{ deserialize_snowpark_args_func }}
+
 with open(sys.argv[1], "rb") as file:
     arg_dict = {{ pickling_library }}.load(file)
+
+_deserialize_snowpark_args(arg_dict)
 {% else %}
 arg_dict = {"args": [], "kwargs": {}}
 {% endif %}
-
-#instantiate Table and SnowparkTable args as Snowpark dataframes
-new_arg_dict={'args':[], 'kwargs':{}}
-for arg in arg_dict['args']:
-    if _is_table_arg(arg):
-        new_arg_dict['args'].append(snowpark_session.table(arg.name))
-    else:
-        new_arg_dict['args'].append(arg)
-
-for arg_name, arg in arg_dict['kwargs'].items():
-    if _is_table_arg(arg):
-        new_arg_dict['kwargs'][arg_name] = snowpark_session.table(arg.name)
-    else:
-        new_arg_dict['kwargs'][arg_name] = arg
-
-arg_dict=new_arg_dict
 
 {% if string_args_global | default(true) -%}
 # Read string args
@@ -73,6 +69,16 @@ with open(sys.argv[3], "r") as file:
 # Script
 {{ python_callable_source }}
 res = {{ python_callable }}(*arg_dict["args"], **arg_dict["kwargs"])
+
+{{ write_snowpark_dataframe_func }}
+{{ serialize_snowpark_results_func }}
+
+if isinstance(res, dict):
+    _serialize_snowpark_results(res, 0)
+elif isinstance(res, tuple):
+    res = tuple(_serialize_snowpark_results(res, 0))
+else:
+    res = _serialize_snowpark_results(res, 0)
 
 snowpark_session.close()
 

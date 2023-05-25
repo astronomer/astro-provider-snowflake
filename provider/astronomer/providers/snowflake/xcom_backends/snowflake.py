@@ -356,7 +356,7 @@ class SnowflakeXComBackend(BaseXCom):
             hook.region = parsed_uri['region']
 
             if parsed_uri['xcom_stage']:
-                assert parsed_uri['xcom_stage'][0] == snowflake_xcom_stage, f"Provided stage {parsed_uri['xcom_stage'][0]} is different from system XCOM stage {snowflake_xcom_stage}."
+                assert parsed_uri['xcom_stage'] == snowflake_xcom_stage, f"Provided stage {parsed_uri['xcom_stage']} is different from system XCOM stage {snowflake_xcom_stage}."
 
                 with tempfile.TemporaryDirectory() as td:
                     hook.run(f"GET @{snowflake_xcom_stage}/{parsed_uri['xcom_key']} file://{td}")

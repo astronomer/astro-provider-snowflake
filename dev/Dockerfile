@@ -2,12 +2,12 @@
 
 FROM quay.io/astronomer/astro-runtime:7.4.2-base
 
-COPY include/astro_provider_snowflake-0.0.1-py3-none-any.whl /tmp
-COPY include/snowflake_snowpark_python-1.3.0-py3-none-any.whl /tmp
+COPY include/astro_provider_snowflake-0.0.1.dev0-py3-none-any.whl /tmp
+COPY include/snowflake_snowpark_python-1.4.0-py3-none-any.whl /tmp
 
-COPY requirements.txt requirements-snowpark.txt /tmp
+COPY requirements.txt /tmp
 
-PYENV 3.8 snowpark requirements-snowpark.txt
+PYENV 3.8 snowpark requirements.txt
 
 #TODO fix after merge https://github.com/astronomer/astro-provider-venv/pull/14/
 USER root
@@ -16,7 +16,7 @@ USER astro
 
 #Seed packages in the 3.8 base for system-site-packages with PythonVirtualenvOperator
 #https://github.com/astronomer/astro-provider-venv/issues/15
-RUN python3.8 -m pip install -r /tmp/requirements-snowpark.txt
+# RUN python3.8 -m pip install -r /tmp/requirements.txt
 
 
 # USER root
