@@ -240,10 +240,12 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
                     arg[k] = snowpark_session.read.parquet(f"@{uri['xcom_stage']}/{uri['xcom_key']}")
                 elif isinstance(v, (dict)):
                     _deserialize_snowpark_args(arg.get(k, {}))
-                elif isinstance(v, (list)):
+                elif isinstance(v, (list, tuple)):
                     arg[k] = _deserialize_snowpark_args(arg.get(k, []))
         elif isinstance(arg, list):
             return [_deserialize_snowpark_args(item) for item in arg]
+        elif isinstance(arg, tuple):
+            return tuple([_deserialize_snowpark_args(item) for item in arg])
         else:
             return arg
     
@@ -328,6 +330,8 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
                 # return [_serialize_snowpark_results(item) for item in res]
             else:
                 return res
+        else:
+            return res
     
     def get_python_source(self):
         raw_source = inspect.getsource(self.python_callable)
@@ -413,6 +417,8 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
             filename=os.fspath(script_path),
             render_template_as_native_obj=False,
         )
+
+        print(script_path.read_text())
 
         try:
             execute_in_subprocess(

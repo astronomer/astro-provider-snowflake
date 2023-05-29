@@ -55,7 +55,14 @@ if sys.version_info >= (3,6):
 with open(sys.argv[1], "rb") as file:
     arg_dict = {{ pickling_library }}.load(file)
 
+print("###########")
+print(arg_dict)
+
 _deserialize_snowpark_args(arg_dict)
+
+print("###########")
+print(arg_dict)
+
 {% else %}
 arg_dict = {"args": [], "kwargs": {}}
 {% endif %}
