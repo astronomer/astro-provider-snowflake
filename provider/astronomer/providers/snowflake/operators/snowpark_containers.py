@@ -233,8 +233,7 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
                             raise AirflowException("Error occurred in Task run.")
 
                         if  response['type'] == 'results':
-                            [self.log.info(line) for line in response['output'].splitlines()]
-                            return response['output']
+                            return json.loads(response['output'])
                                               
                     elif msg.type == aiohttp.WSMsgType.ERROR:
                         break

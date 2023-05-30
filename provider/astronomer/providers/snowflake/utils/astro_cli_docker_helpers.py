@@ -170,6 +170,14 @@ def docker_compose_kill(local_service_spec:dict):
     with ComposeClient(local_service_spec=local_service_spec) as client:
         client.cmd.kill(client.docker_compose_options)
 
+def docker_ls(image_name:str) -> bool:
+
+    client = docker.from_env()
+    try:        
+        return client.images.get(image_name)
+    except:
+        return False
+
 def docker_pull(image_source:str, platform='linux/amd64') -> str:
 
     client = docker.from_env()

@@ -22,6 +22,7 @@ from astronomer.providers.snowflake.utils.astro_cli_docker_helpers import (
         docker_compose_pause,
         docker_compose_unpause,
         docker_push,
+        docker_ls,
         docker_pull,
         docker_logs,
 )
@@ -73,11 +74,11 @@ class SnowparkContainersHook(SnowflakeHook):
     def __init__(self, *args, **kwargs) -> None:
 
         #PYTHON_CONNECTOR_QUERY_RESULT_FORMAT should be json for oauth token fetching
-        if kwargs.get('session_parameters'):
-            assert isinstance(kwargs.get('session_parameters'), dict), "session_parameters in kwargs must be a dictionary"
-            kwargs['session_parameters']['PYTHON_CONNECTOR_QUERY_RESULT_FORMAT']='json'
-        else:
-            kwargs['session_parameters']={'PYTHON_CONNECTOR_QUERY_RESULT_FORMAT':'json'}
+        # if kwargs.get('session_parameters'):
+        #     assert isinstance(kwargs.get('session_parameters'), dict), "session_parameters in kwargs must be a dictionary"
+        #     kwargs['session_parameters']['PYTHON_CONNECTOR_QUERY_RESULT_FORMAT']='json'
+        # else:
+        #     kwargs['session_parameters']={'PYTHON_CONNECTOR_QUERY_RESULT_FORMAT':'json'}
 
         super().__init__(*args, **kwargs)
         self.local_test = kwargs.get("local_test") or None
@@ -779,7 +780,6 @@ class SnowparkContainersHook(SnowflakeHook):
                 except:
                     raise AttributeError('No image source provided and no image found in docker compose specs.')
             else:
-                #image_sources = ['semitechnologies/weaviate:1.17.3','semitechnologies/ner-transformers:dbmdz-bert-large-cased-finetuned-conll03-english','quay.io/minio/minio:latest']
                 
                 temp_sources = {}
                 for image_source in image_sources:
@@ -798,9 +798,13 @@ class SnowparkContainersHook(SnowflakeHook):
                 image_source = image_sources[container]['image_source']
                 image_dest = image_sources[container]['image_dest']
                 image_tag = image_sources[container]['tag']
-                print(f"Pulling image: {image_source}")
 
-                image = docker_pull(image_source=image_source, platform='linux/amd64')
+                image = docker_ls(image_name=image_source)
+                if image and image.attrs['Architecture'] == 'amd64':
+                    print("Found image in local docker.")
+                else:
+                    print(f"Pulling image: {image_source}")
+                    image = docker_pull(image_source=image_source, platform='linux/amd64')
 
                 print(f"Pushing {image.id} to {image_dest}:{image_tag}")
                 image_dest = docker_push(image_source=image, image_dest=image_dest, tag=image_tag, auth_config=auth_config)
