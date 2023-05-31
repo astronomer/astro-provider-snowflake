@@ -644,9 +644,9 @@ class SnowparkContainersHook(SnowflakeHook):
         :type schema: str
         """
 
-        if self.local_test == 'astro_cli':
+        logs = {}
 
-            logs = {}
+        if self.local_test == 'astro_cli':
             
             assert spec_file_name, "spec_file_name is needed for local_test mode."
             
@@ -673,12 +673,10 @@ class SnowparkContainersHook(SnowflakeHook):
             except KeyError:
                 raise AirflowException(f"Service '{service_name} is not running.  Cannot fetch logs.")
             
-            for container in status:
-                instance_id = status[container]['instanceId']
+            for container, container_status in status.items():
+                instance_id = container_status['instanceId']
                 instance_logs = self.get_records(f"CALL SYSTEM$GET_SERVICE_LOGS('{self.database}.{self.schema}.{service_name}', {instance_id}, '{container}');")
                 logs[container] = {instance_id: instance_logs[0][0]}
-
-                print(logs['weaviate']['0'])
 
             return logs
             

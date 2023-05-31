@@ -10,6 +10,17 @@ from astronomer.providers.snowflake import SnowparkTable
 # )
 # _SNOWPARK_BIN = '/home/astro/.venv/snowpark/bin/python'
 
+def test_task3(df1:SnowparkTable, df2:SnowparkTable, str1:str, df6:SnowparkTable, mydict, df3:SnowparkTable, df4:SnowparkTable):
+        
+        df1.show()
+        df2.show()
+        df3.show()
+        df4.show()
+        df6.show()
+        mydict['mystr'] = str1
+
+        return df1
+
 def test_task(df1:SnowparkTable, df2:SnowparkTable, str1:str, df6:SnowparkTable, mydict, df3:SnowparkTable, df4:SnowparkTable):
     from snowflake.snowpark import version as v
     from snowflake.snowpark.functions import col, sproc, udf
@@ -41,3 +52,11 @@ def test_task2(df):
         df7.show()
 
         return df, df7
+
+def myfunc1():
+    import pandas as pd
+    df = pd.DataFrame([{"a": 1, "b": 1}, {"a": 1, "b": 1}, {"a": 1, "b": 1}])
+    a=1
+    b=1
+    print('stuff')
+    return df.to_json()
