@@ -1,6 +1,6 @@
 from astronomer.providers.snowflake.hooks.snowpark_containers import SnowparkContainersHook
 from astronomer.providers.snowflake.operators.snowpark_containers import SnowparkContainersPythonOperator
-from astronomer.providers.snowflake.decorators.snowpark_containers import snowsparkcontainer_python_task
+from astronomer.providers.snowflake.decorators.snowpark_containers import snowpark_containers_python_task
 
 _SNOWFLAKE_CONN_ID='snowflake_default'
 

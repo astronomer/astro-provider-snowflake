@@ -43,10 +43,14 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
     
     :param snowflake_conn_id: connection to use when running code within the Snowpark Container runner service.
     :type snowflake_conn_id: str  (default is snowflake_default)
-    :param runner_service_name: The name of the Airflow runner service. 
-    :param endpoint: Endpoint URL of the instantiated Snowpark Container runner.  
+    :param runner_service_name: Name of Airflow runner service in Snowpark Container services.  Must specify 
+    runner_service_name or endpoint
+    :type runner_service_name: str
+    :param endpoint: Endpoint URL of the instantiated Snowpark Container runner.  Must specify endpoint or 
+    runner_service_name.
     :type endpoint: str
-    :param headers: Optional OAUTH bearer token for Snowpark Container runner.  In local_test mode this can be None.
+    :param headers: Optional OAUTH bearer token for Snowpark Container runner.  If runner_service_name is 
+    specified SnowparkContainersHook() will be used to pull the token just before running the task.
     :type headers: str
     :param python_callable: Function to decorate
     :type python_callable: Callable 
@@ -226,6 +230,15 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
         return responses
         
     async def _execute_python_callable_in_snowpark_container(self):
+
+        print(f"""
+        __________________________________
+        Running function {self.payload['python_callable_name']} in Snowpark Containers 
+        Task: {self.task_id}
+        Runner: {self.endpoint}
+        __________________________________
+        """)
+
        
         async with aiohttp.ClientSession() as session:
             async with session.ws_connect(self.endpoint, headers=self.headers) as ws:

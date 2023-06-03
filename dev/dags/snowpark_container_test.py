@@ -3,7 +3,7 @@ import os
 from airflow.decorators import dag, task
 
 from astronomer.providers.snowflake.operators.snowpark_containers import SnowparkContainersPythonOperator
-from astronomer.providers.snowflake.decorators.snowpark_containers import snowsparkcontainer_python_task
+from astronomer.providers.snowflake.decorators.snowpark_containers import snowpark_containers_python_task
 from astronomer.providers.snowflake.hooks.snowpark_containers import SnowparkContainersHook
 
 from astronomer.providers.snowflake import SnowparkTable
@@ -73,7 +73,7 @@ def snowpark_containers_test():
         weaviate_conn = {'endpoint': 'http://host.docker.internal:8081/', 'headers': None}
 
 
-    @snowsparkcontainer_python_task(task_id='SPdec', endpoint=runner_conn['endpoint'], headers=runner_conn['headers'], temp_data_output='table')
+    @snowpark_containers_python_task(task_id='SPdec', endpoint=runner_conn['endpoint'], headers=runner_conn['headers'], temp_data_output='table')
     def test_task3(df1:SnowparkTable, df2:SnowparkTable, str1:str, df6:SnowparkTable, mydict, df3:SnowparkTable, df4:SnowparkTable):
         
         df1.show()
@@ -135,7 +135,7 @@ def snowpark_containers_test():
     sspo1 >> sspo2
 
     #works
-    @snowsparkcontainer_python_task(endpoint=runner_conn['endpoint'], headers=runner_conn['headers'], snowflake_conn_id=_SNOWFLAKE_CONN_ID)
+    @snowpark_containers_python_task(endpoint=runner_conn['endpoint'], headers=runner_conn['headers'], snowflake_conn_id=_SNOWFLAKE_CONN_ID)
     def myfunc5():
         # import pandas as pd
         # from snowflake.snowpark import Session
@@ -173,7 +173,7 @@ def snowpark_containers_test():
     myfunc3()
     json_output = myfunc4()
 
-    @snowsparkcontainer_python_task(endpoint=runner_conn['endpoint'], headers=runner_conn['headers'], python='3.9')
+    @snowpark_containers_python_task(endpoint=runner_conn['endpoint'], headers=runner_conn['headers'], python='3.9')
     def myfunc6(json_input: dict):
         import pandas as pd
         df = pd.read_json(json_input)
@@ -184,7 +184,7 @@ def snowpark_containers_test():
 
     myfunc6(json_input=json_output)
 
-    @snowsparkcontainer_python_task(endpoint=runner_conn['endpoint'], headers=runner_conn['headers'], requirements=['openai', 'weaviate-client'], snowflake_conn_id=_SNOWFLAKE_CONN_ID)
+    @snowpark_containers_python_task(endpoint=runner_conn['endpoint'], headers=runner_conn['headers'], requirements=['openai', 'weaviate-client'], snowflake_conn_id=_SNOWFLAKE_CONN_ID)
     def myfunc7():
         import pandas as pd
         import openai

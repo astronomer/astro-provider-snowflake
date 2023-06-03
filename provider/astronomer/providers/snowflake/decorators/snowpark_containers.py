@@ -10,16 +10,21 @@ from astronomer.providers.snowflake.operators.snowpark_containers import Snowpar
 
 from airflow.utils.decorators import remove_task_decorator
 
-class SnowparkContainerPythonDecoratedOperator(DecoratedOperator, SnowparkContainersPythonOperator):
+class SnowparkContainersPythonDecoratedOperator(DecoratedOperator, SnowparkContainersPythonOperator):
     """
     Wraps a Python callable and captures args/kwargs when called for execution.
 
     TODO: Update docs
      :param snowflake_conn_id: connection to use when running code within the Snowpark Container runner service.
     :type snowflake_conn_id: str  (default is snowflake_default)
-    :param endpoint: Endpoint URL of the instantiated Snowpark Container runner.  
+    :param runner_service_name: Name of Airflow runner service in Snowpark Container services.  Must specify 
+    runner_service_name or endpoint
+    :type runner_service_name: str
+    :param endpoint: Endpoint URL of the instantiated Snowpark Container runner.  Must specify endpoint or 
+    runner_service_name.
     :type endpoint: str
-    :param headers: Optional OAUTH bearer token for Snowpark Container runner.  In local_test mode this can be None.
+    :param headers: Optional OAUTH bearer token for Snowpark Container runner.  If runner_service_name is 
+    specified SnowparkContainersHook() will be used to pull the token just before running the task.
     :type headers: str
     :param python_callable: Function to decorate
     :type python_callable: Callable 
@@ -43,10 +48,11 @@ class SnowparkContainerPythonDecoratedOperator(DecoratedOperator, SnowparkContai
     # there are some cases we can't deepcopy the objects (e.g protobuf).
     shallow_copy_attrs: Sequence[str] = ("python_callable",)
 
-    custom_operator_name: str = "@snowsparkcontainer_python_task"
+    custom_operator_name: str = "@snowpark_containers_python_task"
 
-    def __init__(self, *, endpoint, headers, python_callable, python, op_args, op_kwargs, **kwargs) -> None:
+    def __init__(self, *, runner_service_name, endpoint, headers, python_callable, python, op_args, op_kwargs, **kwargs) -> None:
         kwargs_to_upstream = {
+            "runner_service_name": runner_service_name,
             "endpoint": endpoint,
             "headers": headers,
             "python_callable": python_callable,
@@ -68,8 +74,9 @@ class SnowparkContainerPythonDecoratedOperator(DecoratedOperator, SnowparkContai
         res = remove_task_decorator(res, self.custom_operator_name)
         return res
 
-def snowsparkcontainer_python_task(
-    endpoint: str, 
+def snowpark_containers_python_task(
+    runner_service_name: str | None = None,
+    endpoint: str | None = None,
     headers: str | None = None,
     python: str | None = None,
     python_callable: Callable | None = None,
@@ -87,9 +94,14 @@ def snowsparkcontainer_python_task(
     
     :param snowflake_conn_id: connection to use when running code within the Snowpark Container runner service.
     :type snowflake_conn_id: str  (default is snowflake_default)
-    :param endpoint: Endpoint URL of the instantiated Snowpark Container runner.  
+    :param runner_service_name: Name of Airflow runner service in Snowpark Container services.  Must specify 
+    runner_service_name or endpoint
+    :type runner_service_name: str
+    :param endpoint: Endpoint URL of the instantiated Snowpark Container runner.  Must specify endpoint or 
+    runner_service_name.
     :type endpoint: str
-    :param headers: Optional OAUTH bearer token for Snowpark Container runner.  In local_test mode this can be None.
+    :param headers: Optional OAUTH bearer token for Snowpark Container runner.  If runner_service_name is 
+    specified SnowparkContainersHook() will be used to pull the token just before running the task.
     :type headers: str
     :param python_callable: Function to decorate
     :type python_callable: Callable 
@@ -102,11 +114,12 @@ def snowsparkcontainer_python_task(
     :type multiple_outputs: bool
     """
     return task_decorator_factory(
+        runner_service_name=runner_service_name,
         endpoint=endpoint,
         headers=headers, 
         python=python,
         python_callable=python_callable,
         multiple_outputs=multiple_outputs,
-        decorated_operator_class=SnowparkContainerPythonDecoratedOperator,
+        decorated_operator_class=SnowparkContainersPythonDecoratedOperator,
         **kwargs,
     )
