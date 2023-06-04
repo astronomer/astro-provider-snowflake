@@ -111,14 +111,15 @@ def snowpark_containers_test():
         assert response, f'Could not resume service {service_name}'
         
 
-    def myfunc1():
-        import pandas as pd
-        df = pd.DataFrame([{"a": 1, "b": 1}, {"a": 1, "b": 1}, {"a": 1, "b": 1}])
-        a=1
-        b=1
+    from include.myfunc import myfunc1
+    # def myfunc1():
+    #     import pandas as pd
+    #     df = pd.DataFrame([{"a": 1, "b": 1}, {"a": 1, "b": 1}, {"a": 1, "b": 1}])
+    #     a=1
+    #     b=1
 
-        print('stuff')
-        return df.to_json()
+    #     print('stuff')
+    #     return df.to_json()
 
     def myfunc2(json_input: dict):
         import pandas as pd
@@ -130,7 +131,11 @@ def snowpark_containers_test():
         return df #.to_json()
     
     #works
-    sspo1 = SnowparkContainersPythonOperator(task_id='sspo1', endpoint=runner_conn['endpoint'], headers=runner_conn['headers'], python_callable=myfunc1)
+    sspo1 = SnowparkContainersPythonOperator(task_id='sspo1', runner_service_name='airflow_task_runner', endpoint=runner_conn['endpoint'], headers=runner_conn['headers'], python_callable=myfunc1)
+
+    sspo1.payload = sspo1._build_payload(context={'run_id': 'testrun', 'ts_nodash':'test'})
+
+
     sspo2 = SnowparkContainersPythonOperator(task_id='sspo2', endpoint=runner_conn['endpoint'], headers=runner_conn['headers'], python_callable=myfunc2, op_kwargs={'json_input': {'a': {0: 4, 1: 4, 2: 4}, 'b': {0: 4, 1: 4, 2: 4}}})
     sspo1 >> sspo2
 

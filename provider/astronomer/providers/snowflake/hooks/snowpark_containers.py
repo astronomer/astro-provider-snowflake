@@ -9,6 +9,10 @@ import yaml
 from uuid import uuid4
 from time import sleep
 import pandas as pd
+import logging
+for logger_name in ('snowflake.snowpark', 'snowflake.connector'):
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.ERROR)
 
 from airflow.exceptions import AirflowException
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
@@ -26,7 +30,6 @@ from astronomer.providers.snowflake.utils.astro_cli_docker_helpers import (
         docker_pull,
         docker_logs,
 )
-
 
 class SnowparkContainersHook(SnowflakeHook):
     """

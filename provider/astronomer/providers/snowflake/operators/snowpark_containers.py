@@ -54,9 +54,9 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
     :type headers: str
     :param python_callable: Function to decorate
     :type python_callable: Callable 
-    :param python: Python version (ie. '<maj>.<min>').  Callable will run in a PythonVirtualenvOperator on the runner.  
+    :param python_version: Python version (ie. '<maj>.<min>').  Callable will run in a PythonVirtualenvOperator on the runner.  
         If not set will use default python version on runner.
-    :type python: str:
+    :type python_version: str:
     :param requirements: Optional list of python dependencies or a path to a requirements.txt file to be installed for the callable.
     :type requirements: list | str
     :param temp_data_output: If set to 'stage' or 'table' Snowpark DataFrame objects returned
@@ -119,7 +119,8 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
         endpoint: str | None = None,
         headers: dict | None = None,
         snowflake_conn_id: str = 'snowflake_default',
-        python: str | None = None,
+        log_level: str = 'ERROR',
+        python_version: str | None = None,
         requirements: Iterable[str] | str = [],
         # use_dill: bool = False,
         pip_install_options: list[str] = [],
@@ -143,16 +144,15 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
         else:
             assert isinstance(requirements, list), "requirements must be a list or filename."
             self.requirements = requirements
-        
-        # hook = SnowparkContainersHook(snowflake_conn_id=snowflake_conn_id)
-                
+
+        self.log_level = log_level                
         self.endpoint=endpoint
         self.headers=headers
         self.runner_service_name=runner_service_name
         self.pip_install_options = pip_install_options
         # self.use_dill = use_dill
         # self.snowflake_user_conn_params = hook._get_conn_params()
-        self.python = python
+        self.python_version = python_version
         # self.expect_airflow = expect_airflow
         # self.expect_pendulum = expect_pendulum
         self.string_args = string_args
@@ -175,22 +175,17 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
 
     def _build_payload(self, context):
 
-        if self.runner_service_name:
-            hook=SnowparkContainersHook(*[f'{k}={v}' for k, v in self.conn_params.items()], session_parameters={'PYTHON_CONNECTOR_QUERY_RESULT_FORMAT': 'json'})
-            urls, headers = hook.get_service_urls(service_name=self.runner_service_name)
-            self.endpoint =  urls[self.runner_service_name]+'/task'
-            self.headers = headers
-
         payload = dict(
             python_callable_str = self.get_python_source(), 
             python_callable_name = self.python_callable.__name__,
+            log_level = self.log_level,
             requirements = self.requirements,
             pip_install_options = self.pip_install_options,
             snowflake_user_conn_params = self.conn_params,
             temp_data_dict = self.temp_data_dict,
             # use_dill = self.use_dill,
             system_site_packages = self.system_site_packages,
-            python = self.python,
+            python_version = self.python_version,
             dag_id = self.dag_id,
             task_id = self.task_id,
             run_id = context['run_id'],
@@ -231,11 +226,17 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
         
     async def _execute_python_callable_in_snowpark_container(self):
 
+        if self.runner_service_name:
+            # hook=SnowparkContainersHook(*[f'{k}={v}' for k, v in self.conn_params.items()], session_parameters={'PYTHON_CONNECTOR_QUERY_RESULT_FORMAT': 'json'})
+            hook=SnowparkContainersHook(*self.conn_params, session_parameters={'PYTHON_CONNECTOR_QUERY_RESULT_FORMAT': 'json'})
+            urls, self.headers = hook.get_service_urls(service_name=self.runner_service_name)
+            self.endpoint = urls['runner']+'/task'
+
         print(f"""
         __________________________________
         Running function {self.payload['python_callable_name']} in Snowpark Containers 
         Task: {self.task_id}
-        Runner: {self.endpoint}
+        Airflow Task Runner: {self.endpoint}
         __________________________________
         """)
 

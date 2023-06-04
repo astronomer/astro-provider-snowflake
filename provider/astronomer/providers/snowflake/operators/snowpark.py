@@ -53,6 +53,7 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
     :param snowflake_conn_id: A Snowflake connection name.  Default 'snowflake_default'
     :param python_callable: A python function with no references to outside variables,
         defined with def, which will be run in a virtualenv.
+    :param log_level: Set log level for Snowflake logging.  Default: 'ERROR'
     :param temp_data_output: If set to 'stage' or 'table' Snowpark DataFrame objects returned
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.
@@ -120,10 +121,12 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         expect_airflow: bool = True,
         show_return_value_in_logs: bool = True,
         skip_on_exit_code: int | Container[int] | None = None,
+        log_level: 'str' = 'ERROR',
         **kwargs,
     ):
         self.skip_on_exit_code = skip_on_exit_code
         self.snowflake_conn_id = snowflake_conn_id
+        self.log_level = log_level
         self.warehouse = kwargs.pop('warehouse', None)
         self.database = kwargs.pop('database', None)
         self.role = kwargs.pop('role', None)
@@ -397,6 +400,7 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
             jinja_context=dict(
                 conn_params=self.get_snowflake_conn_params(),
                 snowflake_conn_id=self.snowflake_conn_id,
+                log_level=self.log_level,
                 temp_data_dict=self.temp_data_dict,
                 dag_id=self.dag_id,
                 task_id=self.task_id,
@@ -418,7 +422,7 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
             render_template_as_native_obj=False,
         )
 
-        print(script_path.read_text())
+        # print(script_path.read_text())
 
         try:
             execute_in_subprocess(
@@ -470,6 +474,7 @@ class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator
     :param snowflake_conn_id: A Snowflake connection name.  Default 'snowflake_default'
     :param python_callable: A python function with no references to outside variables,
         defined with def, which will be run in a virtualenv
+    :param log_level: Set log level for Snowflake logging.  Default: 'ERROR'
     :param requirements: Either a list of requirement strings, or a (templated)
         "requirements file" as specified by pip.
     :param python_version: The Python version to run the virtualenv with. Note that
@@ -604,6 +609,7 @@ class SnowparkExternalPythonOperator(ExternalPythonOperator, _BaseSnowparkOperat
     :param python: Full path string (file-system specific) that points to a Python binary inside
         a virtualenv that should be used (in ``VENV/bin`` folder). Should be absolute path
         (so usually start with "/" or "X:/" depending on the filesystem/os used).
+    :param log_level: Set log level for Snowflake logging.  Default: 'ERROR'
     :param temp_data_output: If set to 'stage' or 'table' Snowpark DataFrame objects returned
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.
@@ -698,6 +704,7 @@ class SnowparkPythonOperator(SnowparkExternalPythonOperator):
 
     :param snowflake_conn_id: Reference to
         :ref:`Snowflake connection id<howto/connection:snowflake>`
+    :param log_level: Set log level for Snowflake logging.  Default: 'ERROR'
     :param temp_data_output: If set to 'stage' or 'table' Snowpark DataFrame objects returned
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.

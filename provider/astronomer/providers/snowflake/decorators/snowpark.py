@@ -15,6 +15,35 @@ class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator
     Wraps a Python callable and captures args/kwargs when called for execution.
 
     :param snowflake_conn_id or conn_id: A Snowflake connection name.  Default 'snowflake_default'
+    :param log_level: Set log level for Snowflake logging.  Default: 'ERROR'
+    :param temp_data_output: If set to 'stage' or 'table' Snowpark DataFrame objects returned
+        from the operator will be serialized to the stage specified by 'temp_data_stage' or
+        a table with prefix 'temp_data_table_prefix'.
+    :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the database set at the operator or hook level.  If None, 
+        the operator will assume a default database is set in the Snowflake user preferences.
+    :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the schema set at the operator or hook level.  If None, 
+        the operator will assume a default schema is set in the Snowflake user preferences.
+    :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
+        must be set if temp_data_output == 'stage'.  Output location will be named for the task:
+        <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
+        
+        and a uri will be returned to Airflow xcom:
+        
+        snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
+
+    :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
+        must be set if temp_data_output == 'table'. Default: "XCOM_"
+
+        Output table will be named for the task:
+        <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
+
+        and the return value set to a SnowparkTable object with the fully-qualified table name.
+        
+        SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
+
+    :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
     :param warehouse: name of warehouse (will overwrite any warehouse defined in the connection's extra JSON)
     :param database: name of database (will overwrite database defined in connection)
     :param schema: name of schema (will overwrite schema defined in connection)
@@ -28,10 +57,6 @@ class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator
         through native Okta.
     :param session_parameters: You can set session-level parameters at the time you connect to Snowflake
     :param python_callable: A reference to an object that is callable
-    :param op_kwargs: a dictionary of keyword arguments that will get unpacked
-        in your function (templated)
-    :param op_args: a list of positional arguments that will get unpacked when
-        calling your callable (templated)
     :param multiple_outputs: If set to True, the decorated function's return value will be unrolled to
         multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys. Defaults to False.
     """
@@ -84,6 +109,49 @@ def snowpark_python_task(
     :param python_callable: Function to decorate
     :param multiple_outputs: If set to True, the decorated function's return value will be unrolled to
         multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys. Defaults to False.
+    :param snowflake_conn_id or conn_id: A Snowflake connection name.  Default 'snowflake_default'
+    :param warehouse: name of warehouse (will overwrite any warehouse defined in the connection's extra JSON)
+    :param database: name of database (will overwrite database defined in connection)
+    :param schema: name of schema (will overwrite schema defined in connection)
+    :param role: name of role (will overwrite any role defined in connection's extra JSON)
+    :param authenticator: authenticator for Snowflake.
+        'snowflake' (default) to use the internal Snowflake authenticator
+        'externalbrowser' to authenticate using your web browser and
+        Okta, ADFS or any other SAML 2.0-compliant identify provider
+        (IdP) that has been defined for your account
+        'https://<your_okta_account_name>.okta.com' to authenticate
+        through native Okta.
+    :param session_parameters: You can set session-level parameters at the time you connect to Snowflake
+    :param python_callable: A reference to an object that is callable
+    :param log_level: Set log level for Snowflake logging.  Default: 'ERROR'
+    :param temp_data_output: If set to 'stage' or 'table' Snowpark DataFrame objects returned
+        from the operator will be serialized to the stage specified by 'temp_data_stage' or
+        a table with prefix 'temp_data_table_prefix'.
+    :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the database set at the operator or hook level.  If None, 
+        the operator will assume a default database is set in the Snowflake user preferences.
+    :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the schema set at the operator or hook level.  If None, 
+        the operator will assume a default schema is set in the Snowflake user preferences.
+    :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
+        must be set if temp_data_output == 'stage'.  Output location will be named for the task:
+        <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
+        
+        and a uri will be returned to Airflow xcom:
+        
+        snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
+
+    :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
+        must be set if temp_data_output == 'table'. Default: "XCOM_"
+
+        Output table will be named for the task:
+        <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
+
+        and the return value set to a SnowparkTable object with the fully-qualified table name.
+        
+        SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
+
+    :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
     """
     return task_decorator_factory(
         python_callable=python_callable,
@@ -99,6 +167,15 @@ class _SnowparkVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirtualenv
     Wraps a Python callable and captures args/kwargs when called for execution.
     :param python_callable: A reference to an object that is callable
     :param snowflake_conn_id or conn_id: A Snowflake connection name.  Default 'snowflake_default'
+    :param requirements: Either a list of requirement strings, or a (templated)
+        "requirements file" as specified by pip.
+    :param python_version: The Python version to run the virtualenv with. Note that
+        both 2 and 2.7 are acceptable forms.
+    :param system_site_packages: Whether to include
+        system_site_packages in your virtualenv.
+        See virtualenv documentation for more information.
+    :param pip_install_options: a list of pip install options when installing requirements
+        See 'pip install -h' for available options
     :param warehouse: name of warehouse (will overwrite any warehouse defined in the connection's extra JSON)
     :param database: name of database (will overwrite database defined in connection)
     :param schema: name of schema (will overwrite schema defined in connection)
@@ -111,10 +188,36 @@ class _SnowparkVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirtualenv
         'https://<your_okta_account_name>.okta.com' to authenticate
         through native Okta.
     :param session_parameters: You can set session-level parameters at the time you connect to Snowflake
-    :param op_kwargs: a dictionary of keyword arguments that will get unpacked
-        in your function (templated)
-    :param op_args: a list of positional arguments that will get unpacked when
-        calling your callable (templated)
+    :param python_callable: A reference to an object that is callable
+    :param log_level: Set log level for Snowflake logging.  Default: 'ERROR'
+    :param temp_data_output: If set to 'stage' or 'table' Snowpark DataFrame objects returned
+        from the operator will be serialized to the stage specified by 'temp_data_stage' or
+        a table with prefix 'temp_data_table_prefix'.
+    :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the database set at the operator or hook level.  If None, 
+        the operator will assume a default database is set in the Snowflake user preferences.
+    :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the schema set at the operator or hook level.  If None, 
+        the operator will assume a default schema is set in the Snowflake user preferences.
+    :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
+        must be set if temp_data_output == 'stage'.  Output location will be named for the task:
+        <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
+        
+        and a uri will be returned to Airflow xcom:
+        
+        snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
+
+    :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
+        must be set if temp_data_output == 'table'. Default: "XCOM_"
+
+        Output table will be named for the task:
+        <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
+
+        and the return value set to a SnowparkTable object with the fully-qualified table name.
+        
+        SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
+
+    :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
     :param multiple_outputs: If set to True, the decorated function's return value will be unrolled to
         multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys. Defaults to False.
     """
@@ -157,9 +260,61 @@ def snowpark_virtualenv_task(
     This function is only used only used during type checking or auto-completion.
     :meta private:
     :param python_callable: Function to decorate
+    :param requirements: Either a list of requirement strings, or a (templated)
+        "requirements file" as specified by pip.
+    :param python_version: The Python version to run the virtualenv with. Note that
+        both 2 and 2.7 are acceptable forms.
+    :param system_site_packages: Whether to include
+        system_site_packages in your virtualenv.
+        See virtualenv documentation for more information.
+    :param pip_install_options: a list of pip install options when installing requirements
+        See 'pip install -h' for available options
     :param multiple_outputs: If set to True, the decorated function's return value will be unrolled to
         multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys.
         Defaults to False.
+    :param snowflake_conn_id or conn_id: A Snowflake connection name.  Default 'snowflake_default'
+    :param warehouse: name of warehouse (will overwrite any warehouse defined in the connection's extra JSON)
+    :param database: name of database (will overwrite database defined in connection)
+    :param schema: name of schema (will overwrite schema defined in connection)
+    :param role: name of role (will overwrite any role defined in connection's extra JSON)
+    :param authenticator: authenticator for Snowflake.
+        'snowflake' (default) to use the internal Snowflake authenticator
+        'externalbrowser' to authenticate using your web browser and
+        Okta, ADFS or any other SAML 2.0-compliant identify provider
+        (IdP) that has been defined for your account
+        'https://<your_okta_account_name>.okta.com' to authenticate
+        through native Okta.
+    :param session_parameters: You can set session-level parameters at the time you connect to Snowflake
+    :param python_callable: A reference to an object that is callable
+    :param log_level: Set log level for Snowflake logging.  Default: 'ERROR'
+    :param temp_data_output: If set to 'stage' or 'table' Snowpark DataFrame objects returned
+        from the operator will be serialized to the stage specified by 'temp_data_stage' or
+        a table with prefix 'temp_data_table_prefix'.
+    :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the database set at the operator or hook level.  If None, 
+        the operator will assume a default database is set in the Snowflake user preferences.
+    :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the schema set at the operator or hook level.  If None, 
+        the operator will assume a default schema is set in the Snowflake user preferences.
+    :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
+        must be set if temp_data_output == 'stage'.  Output location will be named for the task:
+        <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
+        
+        and a uri will be returned to Airflow xcom:
+        
+        snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
+
+    :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
+        must be set if temp_data_output == 'table'. Default: "XCOM_"
+
+        Output table will be named for the task:
+        <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
+
+        and the return value set to a SnowparkTable object with the fully-qualified table name.
+        
+        SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
+
+    :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
     """
     return task_decorator_factory(
         python_callable=python_callable,
@@ -190,12 +345,36 @@ class _SnowparkExternalPythonDecoratedOperator(DecoratedOperator, SnowparkExtern
         'https://<your_okta_account_name>.okta.com' to authenticate
         through native Okta.
     :param session_parameters: You can set session-level parameters at the time you connect to Snowflake
-    :param op_kwargs: a dictionary of keyword arguments that will get unpacked
-        in your function (templated)
-    :param op_args: a list of positional arguments that will get unpacked when
-        calling your callable (templated)
-    :param multiple_outputs: If set to True, the decorated function's return value will be unrolled to
-        multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys. Defaults to False.
+    :param python_callable: A reference to an object that is callable
+    :param log_level: Set log level for Snowflake logging.  Default: 'ERROR'
+    :param temp_data_output: If set to 'stage' or 'table' Snowpark DataFrame objects returned
+        from the operator will be serialized to the stage specified by 'temp_data_stage' or
+        a table with prefix 'temp_data_table_prefix'.
+    :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the database set at the operator or hook level.  If None, 
+        the operator will assume a default database is set in the Snowflake user preferences.
+    :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the schema set at the operator or hook level.  If None, 
+        the operator will assume a default schema is set in the Snowflake user preferences.
+    :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
+        must be set if temp_data_output == 'stage'.  Output location will be named for the task:
+        <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
+        
+        and a uri will be returned to Airflow xcom:
+        
+        snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
+
+    :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
+        must be set if temp_data_output == 'table'. Default: "XCOM_"
+
+        Output table will be named for the task:
+        <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
+
+        and the return value set to a SnowparkTable object with the fully-qualified table name.
+        
+        SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
+
+    :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
     """
 
     custom_operator_name: str = "@snowpark_ext_python_task"
@@ -243,6 +422,49 @@ def snowpark_ext_python_task(
     :param multiple_outputs: If set to True, the decorated function's return value will be unrolled to
         multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys.
         Defaults to False.
+    :param snowflake_conn_id or conn_id: A Snowflake connection name.  Default 'snowflake_default'
+    :param warehouse: name of warehouse (will overwrite any warehouse defined in the connection's extra JSON)
+    :param database: name of database (will overwrite database defined in connection)
+    :param schema: name of schema (will overwrite schema defined in connection)
+    :param role: name of role (will overwrite any role defined in connection's extra JSON)
+    :param authenticator: authenticator for Snowflake.
+        'snowflake' (default) to use the internal Snowflake authenticator
+        'externalbrowser' to authenticate using your web browser and
+        Okta, ADFS or any other SAML 2.0-compliant identify provider
+        (IdP) that has been defined for your account
+        'https://<your_okta_account_name>.okta.com' to authenticate
+        through native Okta.
+    :param session_parameters: You can set session-level parameters at the time you connect to Snowflake
+    :param python_callable: A reference to an object that is callable
+    :param log_level: Set log level for Snowflake logging.  Default: 'ERROR'
+    :param temp_data_output: If set to 'stage' or 'table' Snowpark DataFrame objects returned
+        from the operator will be serialized to the stage specified by 'temp_data_stage' or
+        a table with prefix 'temp_data_table_prefix'.
+    :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the database set at the operator or hook level.  If None, 
+        the operator will assume a default database is set in the Snowflake user preferences.
+    :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the schema set at the operator or hook level.  If None, 
+        the operator will assume a default schema is set in the Snowflake user preferences.
+    :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
+        must be set if temp_data_output == 'stage'.  Output location will be named for the task:
+        <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
+        
+        and a uri will be returned to Airflow xcom:
+        
+        snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
+
+    :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
+        must be set if temp_data_output == 'table'. Default: "XCOM_"
+
+        Output table will be named for the task:
+        <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
+
+        and the return value set to a SnowparkTable object with the fully-qualified table name.
+        
+        SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
+
+    :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
     """
     return task_decorator_factory(
         python=python,

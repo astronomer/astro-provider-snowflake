@@ -11,12 +11,13 @@ try:
     import docker
     from compose.cli.main import TopLevelCommand, project_from_options # noqa
 except ImportError:
-    warnings.warn(
-        "SnowparkContainersHook requires the docker and docker-compose packages \
-         for local_test mode. Install with [docker] extras.\
-        Note: To avoid docker-in-docker inception problems these functions will \
-         not be available to Airflow tasks in a docker container."
-    ) # noqa
+    pass
+    # warnings.warn(
+    #     "SnowparkContainersHook requires the docker and docker-compose packages \
+    #      for local_test mode. Install with [docker] extras.\
+    #     Note: To avoid docker-in-docker inception problems these functions will \
+    #      not be available to Airflow tasks in a docker container."
+    # )
 
 class ComposeClient():
 

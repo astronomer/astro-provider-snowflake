@@ -4,6 +4,10 @@ import pandas as pd
 import numpy as np
 from urllib import parse as parser
 from typing import Any, Iterable
+import logging
+for logger_name in ('snowflake.snowpark', 'snowflake.connector'):
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.{{ log_level }})
 
 try:
     from snowflake.snowpark import DataFrame as Snowpark_DataFrame
