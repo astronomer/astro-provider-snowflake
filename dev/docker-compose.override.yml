@@ -1,9 +1,12 @@
 version: '3.1'
 services:
   scheduler:
-    extra_hosts:
-      - "host.docker.internal:host-gateway"  
+    environment:
+      AIRFLOW_CONN_SNOWFLAKE_DEFAULT: ${AIRFLOW_CONN_SNOWFLAKE_DEFAULT}
+      # AIRFLOW__CORE__XCOM_BACKEND: 'astronomer.providers.snowflake.xcom_backends.snowflake.SnowflakeXComBackend'
+      AIRFLOW__CORE__XCOM_SNOWFLAKE_TABLE: 'SISSYG.XCOM.XCOM_TABLE'
+      AIRFLOW__CORE__XCOM_SNOWFLAKE_STAGE: 'SISSYG.XCOM.XCOM_STAGE'
+      AIRFLOW__CORE__XCOM_SNOWFLAKE_CONN_NAME: 'snowflake_default'
     # volumes:
     #   - ${PWD}/../provider/astronomer/providers/snowflake:/usr/local/lib/python3.9/site-packages/astronomer/providers/snowflake
     #   - ${PWD}/../provider/astronomer/providers/snowflake:/usr/local/lib/python3.8/site-packages/astronomer/providers/snowflake
-  

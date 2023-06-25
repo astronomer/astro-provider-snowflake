@@ -1,25 +1,27 @@
 import pandas as pd
-from airflow.decorators import dag
+from airflow.decorators import dag, task
 from airflow.utils.dates import days_ago
 
+from astro import sql as aql
+from astro.sql.table import Table
+from astro.files import File
+from astronomer.providers.snowflake.utils.snowpark_helpers import SnowparkTable
+
+#test import
 from astronomer.providers.snowflake.operators.snowpark import (
+    SnowparkPythonOperator, 
     SnowparkVirtualenvOperator, 
-    SnowparkExternalPythonOperator,
-    SnowparkPythonOperator
+    SnowparkExternalPythonOperator
 )
+
 from astronomer.providers.snowflake.decorators.snowpark import (
     snowpark_python_task,
     snowpark_virtualenv_task,
     snowpark_ext_python_task
 )
-# from astro.sql.table import Table
-from astronomer.providers.snowflake import SnowparkTable
 
-df1 = SnowparkTable('STG_ORDERS', metadata={'database':'sissyg', 'schema':'demo'}, conn_id='snowflake_default')
-df2 = SnowparkTable('sissyg.demo.stg_ad_spend', conn_id='snowflake_default')
-df3 = SnowparkTable('STG_payments')
-df4 = SnowparkTable('stg_customers', metadata={'database':'sissyg'})
-df6 = SnowparkTable('stg_sessions', conn_id='snowflake_user')
+_SNOWFLAKE_CONN_ID = 'snowflake_default'
+_SNOWPARK_BIN = '/home/astro/.venv/snowpark/bin/python'
 
 PACKAGES = [
     # "snowflake-snowpark-python",
@@ -31,7 +33,6 @@ PACKAGES = [
     # "cachetools",
 ]
 
-_SNOWPARK_BIN = '/home/astro/.venv/snowpark/bin/python'
 
 @dag(
     default_args={"owner": "Airflow", 
@@ -44,49 +45,58 @@ _SNOWPARK_BIN = '/home/astro/.venv/snowpark/bin/python'
 )
 def snowpark_test_dag():
 
-    @snowpark_python_task(task_id='SPdec', temp_data_output='table')
-    def test_task3(df1:SnowparkTable, df2:SnowparkTable, str1:str, df6:SnowparkTable, mydict, df3:SnowparkTable, df4:SnowparkTable):
+    raw_table = aql.load_file(
+        input_file = File('include/data/yellow_tripdata_sample_2019_01.csv'), 
+        output_table = Table(name='TAXI_RAW', conn_id=_SNOWFLAKE_CONN_ID),
+        if_exists='replace'
+    )
+
+    @task.snowpark_python(task_id='SPdec', temp_data_output='table')
+    def spdec(rawdf:SnowparkTable):
+        from snowflake.snowpark.row import Row
+
+        test_row = Row(VENDOR_ID=2, 
+                       PICKUP_DATETIME='2019-01-05 06:36:51', 
+                       DROPOFF_DATETIME='2019-01-05 06:50:42', 
+                       PASSENGER_COUNT=1, 
+                       TRIP_DISTANCE=3.72,
+                       RATE_CODE_ID=1, 
+                       STORE_AND_FWD_FLAG='N', 
+                       PICKUP_LOCATION_ID=68, 
+                       DROPOFF_LOCATION_ID=236, 
+                       PAYMENT_TYPE=1, 
+                       FARE_AMOUNT=14.0, 
+                       EXTRA=0.0, MTA_TAX=0.5, 
+                       TIP_AMOUNT=1.0, 
+                       TOLLS_AMOUNT=0.0, 
+                       IMPROVEMENT_SURCHARGE=0.3, 
+                       TOTAL_AMOUNT=15.8, 
+                       CONGESTION_SURCHARGE=None)
         
-        df1.show()
-        df2.show()
-        df3.show()
-        df4.show()
-        df6.show()
-        mydict['mystr'] = str1
+        assert test_row == rawdf.collect()[0]
 
-        return df1
-    SPdec = test_task3(df1=df1, df2=df2, str1='testbad', df6=df6, df3=df3, mydict={}, df4=df4)
+        return rawdf
+    SPdec = spdec(raw_table)
 
 
-    @snowpark_ext_python_task(task_id='EPdec', python=_SNOWPARK_BIN, role='michaelgregory')
-    def test_task(df):
-        df.show()
-        df7 = snowpark_session.table('STG_payments')
-        df7.show()
+    @task.snowpark_ext_python(task_id='EPdec', python=_SNOWPARK_BIN, temp_data_schema='XCOM')
+    def epdec(rawdf):
 
-        return df, df7
-        # return df
+        newdf = snowpark_session.table(rawdf.table_name)
+        
+        assert newdf.collect() == rawdf.collect()
+
+        return newdf
     
-    EPdec = test_task(df=SPdec)
+    EPdec = epdec(rawdf=SPdec)
 
-    @snowpark_virtualenv_task(task_id='VEdec', python_version='3.9', requirements=PACKAGES, database='sissyg', temp_data_output='table')
-    def test_task1(dfs, str1:str, mylist:list, df:pd.DataFrame):
+    @task.snowpark_virtualenv(task_id='VEdec', python_version='3.9', requirements=PACKAGES, database='sissyg', temp_data_output='table')
+    def vedec(newdf, rawdf):
+        import pandas as pd
 
-        print(dfs)
-        df1 = dfs[0]
-        df1.show()
-        df2 = dfs[0]
-        df2.show()
-
-        df8 = pd.concat([df, pd.DataFrame(mylist, columns=['name'])]).reset_index()
-        print(df8)
-
-        df9 = snowpark_session.create_dataframe(df8)
+        assert pd.DataFrame.equals(newdf.to_pandas(), rawdf.to_pandas())
         
-        return {'df': df.to_json(), 'df1': df1, 'mystr': 'success', 'dfs': {'d2': df2, 'df8': df8.to_json(), 'df9': df9} }
-        # return {'df9': df9, 'df1': df1, 'mystr': 'success'}
-
-    VEdec = test_task1(dfs=EPdec, str1='testbad', mylist=['x','y'], df=pd.DataFrame(['b','a'], columns=['name']))
+    VEdec = vedec(newdf=EPdec, rawdf=SPdec)
     
     # from include.tests import test_task, test_task1, test_task2
     # SPop = SnowparkPythonOperator(task_id='SPtask', 

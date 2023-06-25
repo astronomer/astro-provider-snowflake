@@ -1,9 +1,5 @@
 import {{ pickling_library }}
 import sys
-import pandas as pd
-import numpy as np
-from urllib import parse as parser
-from typing import Any, Iterable
 import logging
 for logger_name in ('snowflake.snowpark', 'snowflake.connector'):
     logger = logging.getLogger(logger_name)
@@ -22,13 +18,13 @@ try:
 except: 
     Table = TempTable = None
 
-try: 
-    from astronomer.providers.snowflake import SnowparkTable
-except: 
-    SnowparkTable = None
+from astronomer.providers.snowflake.utils.snowpark_helpers import (
+    SnowparkTable,
+    _deserialize_snowpark_args,
+    _serialize_snowpark_results
+)
 
 conn_params = {{ conn_params }}
-snowflake_conn_id = '{{ snowflake_conn_id }}'
 temp_data_dict = {{ temp_data_dict }}
 dag_id = '{{ dag_id }}'
 task_id = '{{ task_id }}'
@@ -52,14 +48,10 @@ if sys.version_info >= (3,6):
 {% endif %}
 
 {% if op_args or op_kwargs %}
-{{ try_parse_snowflake_xcom_uri_func }}
-{{ is_table_arg_func }}
-{{ deserialize_snowpark_args_func }}
-
 with open(sys.argv[1], "rb") as file:
     arg_dict = {{ pickling_library }}.load(file)
 
-_deserialize_snowpark_args(arg_dict)
+arg_dict = _deserialize_snowpark_args(arg_dict, snowpark_session, conn_params)
 
 {% else %}
 arg_dict = {"args": [], "kwargs": {}}
@@ -75,15 +67,7 @@ with open(sys.argv[3], "r") as file:
 {{ python_callable_source }}
 res = {{ python_callable }}(*arg_dict["args"], **arg_dict["kwargs"])
 
-{{ write_snowpark_dataframe_func }}
-{{ serialize_snowpark_results_func }}
-
-if isinstance(res, dict):
-    _serialize_snowpark_results(res, 0)
-elif isinstance(res, tuple):
-    res = tuple(_serialize_snowpark_results(res, 0))
-else:
-    res = _serialize_snowpark_results(res, 0)
+res, _ = _serialize_snowpark_results(res, snowpark_session, temp_data_dict, conn_params, dag_id, task_id, run_id, ts_nodash, 0)
 
 snowpark_session.close()
 

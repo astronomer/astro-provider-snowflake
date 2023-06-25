@@ -64,7 +64,7 @@ class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator
     template_fields: Sequence[str] = ("templates_dict", "op_args", "op_kwargs")
     template_fields_renderers = {"templates_dict": "json", "op_args": "py", "op_kwargs": "py"}
 
-    custom_operator_name: str = "@snowpark_python_task"
+    custom_operator_name: str = "@task.snowpark_python"
 
     def __init__(self, 
                  *, 
@@ -222,7 +222,7 @@ class _SnowparkVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirtualenv
         multiple XCom values. Dict will unroll to XCom values with its keys as XCom keys. Defaults to False.
     """
 
-    custom_operator_name: str = "@snowpark_virtualenv_task"
+    custom_operator_name: str = "@task.snowpark_virtualenv"
 
     def __init__(self, 
                  *, 
@@ -377,7 +377,7 @@ class _SnowparkExternalPythonDecoratedOperator(DecoratedOperator, SnowparkExtern
     :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
     """
 
-    custom_operator_name: str = "@snowpark_ext_python_task"
+    custom_operator_name: str = "@task.snowpark_ext_python"
 
     def __init__(self, 
                  *, 

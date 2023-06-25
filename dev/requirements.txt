@@ -1,4 +1,3 @@
-psycopg2-binary
-/tmp/astro_provider_snowflake-0.0.1.dev0-py3-none-any.whl
-/tmp/snowflake_snowpark_python-1.4.0-py3-none-any.whl
-virtualenv
+apache-airflow-providers-snowflake==4.1.0
+snowflake_snowpark_python[pandas]==1.5.0
+/tmp/astro_provider_snowflake-0.0.1a1-py3-none-any.whl

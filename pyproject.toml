@@ -12,7 +12,7 @@ requires-python = ">=3.7"
 packages = [{include = "astronomer.providers.snowflake", from = "provider"}]
 
 authors = [
-    { name = "Astronomer", email = "humans@astronomer.io" },
+    {name = "Michael Gregory", email = "michael.gregory@astronomer.io"},
 ]
 keywords = [
     "airflow",
@@ -67,6 +67,9 @@ tests = [
 Homepage = "https://github.com/astronomer/astro-provider-snowflake/"
 Documentation = "https://github.com/astronomer/astro-provider-snowflake/"
 
+[project.entry-points.apache_airflow_provider]
+provider_info = "astronomer.providers.snowflake:get_provider_info"
+
 [tool.hatch.version]
 path = "provider/astronomer/providers/snowflake/__init__.py"
 
@@ -91,7 +94,7 @@ sources = ["provider"]
 
 [tool.hatch.build.targets.wheel]
 include = [
-  "/provider/astronomer/providers/snowflake",
+  "provider/astronomer/providers/snowflake",
 ]
 
 [tool.mypy]
