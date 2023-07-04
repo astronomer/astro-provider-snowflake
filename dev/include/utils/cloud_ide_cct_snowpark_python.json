@@ -15,7 +15,7 @@
       "decorator": {
         "decoratorName": "snowpark_python_task",
         "imports": [
-          "from include.astronomer.providers.snowflake.decorators.snowpark import snowpark_python_task"
+          "from providers.snowflake.decorators.snowpark import snowpark_python_task"
         ],
         "functionCodeConfig": "python_callable",
         "includeImplicitDeps": true,

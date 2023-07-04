@@ -6,7 +6,7 @@ from typing import Callable, Sequence
 
 from airflow.decorators.base import DecoratedOperator, TaskDecorator, task_decorator_factory
 
-from include.provider.astronomer.providers.snowflake.operators.snowpark_containers import SnowparkContainersPythonOperator
+from astronomer.providers.snowflake.operators.snowpark_containers import SnowparkContainersPythonOperator
 
 from airflow.utils.decorators import remove_task_decorator
 

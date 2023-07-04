@@ -98,18 +98,18 @@ def snowpark_test_dag():
         
     VEdec = vedec(newdf=EPdec, rawdf=SPdec)
     
-    # from include.tests import test_task, test_task1, test_task2
-    # SPop = SnowparkPythonOperator(task_id='SPtask', 
-    #                               python_callable=test_task2, 
-    #                             #   database='sandbox',
-    #                             #   schema='michaelgregory',
-    #                               temp_data_output = 'table',
-    #                             #   temp_data_stage = 'xcom_stage',
-    #                               snowflake_conn_id='snowflake_default',
-    #                             #   op_args = [df1, df2, 'testbad'], 
-    #                               op_kwargs = {'df': SnowparkTable(name='XCOM_SNOWPARK_TEST_DAG__SPDEC__20230525T110601__0', conn_id='snowflake_default', metadata={'schema': 'DEMO', 'database': 'SISSYG'})}
-    #                             )
-    # SPop
+    from include.tests import test_task, test_task1, test_task2
+    SPop = SnowparkPythonOperator(task_id='SPtask', 
+                                  python_callable=test_task2, 
+                                  database='sandbox',
+                                  schema='michaelgregory',
+                                  temp_data_output = 'table',
+                                  temp_data_stage = 'xcom_stage',
+                                  snowflake_conn_id='snowflake_default',
+                                  op_args = [df1, df2, 'testbad'], 
+                                  op_kwargs = {'df': SnowparkTable(name='XCOM_SNOWPARK_TEST_DAG__SPDEC__20230525T110601__0', conn_id='snowflake_default', metadata={'schema': 'DEMO', 'database': 'SISSYG'})}
+                                )
+    SPop
 
     # VEop = SnowparkPythonOperator(task_id='VEtask', 
     #                                   python_callable=test_task1, 

@@ -14,9 +14,9 @@ from airflow.exceptions import AirflowException
 from airflow.operators.python import _BasePythonVirtualenvOperator
 from airflow.utils.context import Context, context_copy_partial
 
-from include.provider.astronomer.providers.snowflake.hooks.snowpark_containers import SnowparkContainersHook
-from include.provider.astronomer.providers.snowflake.operators.snowpark import _BaseSnowparkOperator
-from include.provider.astronomer.providers.snowflake.utils.snowpark_helpers import SnowparkTable, Metadata
+from astronomer.providers.snowflake.hooks.snowpark_containers import SnowparkContainersHook
+from astronomer.providers.snowflake.operators.snowpark import _BaseSnowparkOperator
+from astronomer.providers.snowflake.utils.snowpark_helpers import SnowparkTable, Metadata
 
 try:
     from astro.sql.table import Table, TempTable
