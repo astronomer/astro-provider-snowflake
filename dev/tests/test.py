@@ -44,8 +44,8 @@ import inspect
 #         return cls
 
 
-df1 = SnowparkTable('STG_ORDERS', metadata={'database':'SANDBOX', 'schema':'michaelgregory'})
-df2 = SnowparkTable('sandbox.michaelgregory.stg_ad_spend')
+df1 = SnowparkTable('STG_ORDERS', metadata={'database':'SANDBOX', 'schema':''})
+df2 = SnowparkTable('sandbox..stg_ad_spend')
 df3 = SnowparkTable('STG_payments', metadata={'database':'SANDBOX'})
 df4 = SnowparkTable('stg_customers')
 df6 = SnowparkTable('stg_sessions')

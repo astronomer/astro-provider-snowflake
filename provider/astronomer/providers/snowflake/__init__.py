@@ -1,4 +1,4 @@
-__version__ = "0.0.1a1"
+__version__ = "0.0.0"
 
 
 def get_provider_info():
@@ -18,6 +18,10 @@ def get_provider_info():
             {
                 "name": "snowpark_ext_python",
                 "class-name": "astronomer.providers.snowflake.decorators.snowpark.snowpark_ext_python_task",
+            },
+            {
+                "name": "snowpark_containers_python",
+                "class-name": "astronomer.providers.snowflake.decorators.snowpark_containers.snowpark_containers_python_task",
             },
         ],
     }

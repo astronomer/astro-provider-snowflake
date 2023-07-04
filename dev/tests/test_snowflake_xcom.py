@@ -118,7 +118,7 @@ complex_value = (list_value, np_value, df_value)
 uris = self.serialize_value(value=complex_value, dag_id=dag_id, task_id=task_id, run_id=run_id, multi_index=multi_index, key='mycomplextp')
 # assert complex_value == self.deserialize_value(uris.decode())
 
-table_value=Table(name='TAXI_RAW', conn_id='snowflake_default', metadata=Metadata(schema='MICHAELGREGORY', database='SANDBOX'), columns=[], temp=False)
+table_value=Table(name='TAXI_RAW', conn_id='snowflake_default', metadata=Metadata(schema='', database='SANDBOX'), columns=[], temp=False)
 uri = self._serialize(value=table_value, dag_id=dag_id, task_id=task_id, run_id=run_id, multi_index=multi_index, key='mytbl')
 assert table_value == self._deserialize(uri)
 
