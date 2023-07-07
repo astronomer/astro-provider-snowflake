@@ -7,10 +7,15 @@ import inspect
 from typing import Any, Callable, Collection, Iterable, Mapping, Sequence, Container, TYPE_CHECKING
 import subprocess
 from pathlib import Path
+import json
+import re
 
+import aiohttp
+import asyncio
+
+from airflow.models import BaseOperator, BaseOperatorLink
+from airflow.configuration import conf
 from airflow.utils.context import Context, context_copy_partial
-if TYPE_CHECKING:
-    from airflow.utils.context import Context
 
 from airflow.utils.process_utils import execute_in_subprocess
 from airflow.utils.decorators import remove_task_decorator
@@ -25,16 +30,17 @@ from airflow.exceptions import (
 )
 
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
-
+from astronomer.providers.snowflake.hooks.snowpark import SnowparkContainersHook
 from astronomer.providers.snowflake.utils.snowpark_helpers import (
     SnowparkTable,
     _try_parse_snowflake_xcom_uri,
     _is_table_arg,
     _deserialize_snowpark_args,
     _write_snowpark_dataframe,
-    _serialize_snowpark_results
+    _serialize_snowpark_results,
+    _deserialize_snowpark_tables,
+    _serialize_table_args
 )
-
 
 try:
     from astro.sql.table import Table, TempTable
@@ -46,6 +52,14 @@ try:
     from snowflake.snowpark import Session as SnowparkSession
 except ImportError:
     SnowparkSession = None  # type: ignore
+
+class SnowparkOperatorExtraLink(BaseOperatorLink):
+
+    name = "Astronomer Registry"
+    
+    def get_link(self, operator: BaseOperator, *, ti_key=None):
+        return "https://registry.astronomer.io/providers/astro-provider-snowflake/versions/latest"
+
 
 class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
     """
@@ -112,7 +126,7 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
     def __init__(
         self,
         *,
-        python_callable: Callable,
+        # python_callable: Callable,
         snowflake_conn_id: str = "snowflake_default",
         temp_data_output: str = None,
         temp_data_db: str = None,
@@ -120,19 +134,19 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         temp_data_stage: str = None,
         temp_data_table_prefix: str = 'XCOM_',
         temp_data_overwrite: bool = False,
-        use_dill: bool = False,
-        op_args: Collection[Any] | None = None,
-        op_kwargs: Mapping[str, Any] | None = None,
-        string_args: Iterable[str] | None = None,
-        templates_dict: dict | None = None,
-        templates_exts: list[str] | None = None,
-        expect_airflow: bool = True,
-        show_return_value_in_logs: bool = True,
-        skip_on_exit_code: int | Container[int] | None = None,
+        # use_dill: bool = False,
+        # op_args: Collection[Any] | None = None,
+        # op_kwargs: Mapping[str, Any] | None = None,
+        # string_args: Iterable[str] | None = None,
+        # templates_dict: dict | None = None,
+        # templates_exts: list[str] | None = None,
+        # expect_airflow: bool = True,
+        show_return_value_in_logs: bool = False,
+        # skip_on_exit_code: int | Container[int] | None = None,
         log_level: 'str' = 'ERROR',
         **kwargs,
     ):
-        self.skip_on_exit_code = skip_on_exit_code
+        # self.skip_on_exit_code = skip_on_exit_code
         self.snowflake_conn_id = snowflake_conn_id
         self.log_level = log_level
         self.warehouse = kwargs.pop('warehouse', None)
@@ -151,19 +165,27 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
             'temp_data_table_prefix': temp_data_table_prefix,
             'temp_data_overwrite': temp_data_overwrite
         }
+        
+        ####DEBUG####
+        ####DEBUG####
+        ####DEBUG####
+        self.test_kwargs = kwargs
+        ####DEBUG####
+        ####DEBUG####
+        ####DEBUG####
     
         if temp_data_output == 'stage':
             assert temp_data_stage, "temp_data_stage must be specified if temp_data_output='stage'"
         
         super().__init__(
-            python_callable=python_callable,
-            use_dill=use_dill,
-            op_args=op_args,
-            op_kwargs=op_kwargs,
-            string_args=string_args,
-            templates_dict=templates_dict,
-            templates_exts=templates_exts,
-            expect_airflow=expect_airflow,
+            # python_callable=python_callable,
+            # use_dill=use_dill,
+            # op_args=op_args,
+            # op_kwargs=op_kwargs,
+            # string_args=string_args,
+            # templates_dict=templates_dict,
+            # templates_exts=templates_exts,
+            # expect_airflow=expect_airflow,
             show_return_value_in_logs=show_return_value_in_logs,
             # skip_on_exit_code=skip_on_exit_code,
             **kwargs,
@@ -396,39 +418,39 @@ class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator
 
     def __init__(
         self,
-        *,
-        python_callable: Callable,
-        snowflake_conn_id: str = 'snowflake_default',
-        requirements: None | Iterable[str] | str = None,
-        python_version: str | int | float | None = None,
-        use_dill: bool = False,
-        system_site_packages: bool = True,
-        pip_install_options: list[str] | None = None,
-        op_args: Collection[Any] | None = None,
-        op_kwargs: Mapping[str, Any] | None = None,
-        string_args: Iterable[str] | None = None,
-        templates_dict: dict | None = None,
-        templates_exts: list[str] | None = None,
-        expect_airflow: bool = True,
-        skip_on_exit_code: int | Container[int] | None = None,
+        # *,
+        # python_callable: Callable,
+        # snowflake_conn_id: str = 'snowflake_default',
+        # requirements: None | Iterable[str] | str = None,
+        # python_version: str | int | float | None = None,
+        # use_dill: bool = False,
+        # system_site_packages: bool = True,
+        # pip_install_options: list[str] | None = None,
+        # op_args: Collection[Any] | None = None,
+        # op_kwargs: Mapping[str, Any] | None = None,
+        # string_args: Iterable[str] | None = None,
+        # templates_dict: dict | None = None,
+        # templates_exts: list[str] | None = None,
+        # expect_airflow: bool = True,
+        # skip_on_exit_code: int | Container[int] | None = None,
         **kwargs,
     ):        
 
         super().__init__(
-            python_callable=python_callable,
-            snowflake_conn_id=snowflake_conn_id,
-            use_dill=use_dill,
-            op_args=op_args,
-            op_kwargs=op_kwargs,
-            string_args=string_args,
-            templates_dict=templates_dict,
-            templates_exts=templates_exts,
-            expect_airflow=expect_airflow,
-            skip_on_exit_code=skip_on_exit_code,
-            requirements=requirements,
-            python_version=python_version,
-            system_site_packages=system_site_packages,
-            pip_install_options=pip_install_options,
+            # python_callable=python_callable,
+            # snowflake_conn_id=snowflake_conn_id,
+            # use_dill=use_dill,
+            # op_args=op_args,
+            # op_kwargs=op_kwargs,
+            # string_args=string_args,
+            # templates_dict=templates_dict,
+            # templates_exts=templates_exts,
+            # expect_airflow=expect_airflow,
+            # skip_on_exit_code=skip_on_exit_code,
+            # requirements=requirements,
+            # python_version=python_version,
+            # system_site_packages=system_site_packages,
+            # pip_install_options=pip_install_options,
             **kwargs,
         )
 
@@ -518,41 +540,42 @@ class SnowparkExternalPythonOperator(ExternalPythonOperator, _BaseSnowparkOperat
         macros when starting.
     """
     template_fields: Sequence[str] = tuple(set(_BaseSnowparkOperator.template_fields))
-    template_ext: Sequence[str] = (".txt",)
+    # template_ext: Sequence[str] = (".txt",)
 
     def __init__(
         self,
-        *,
-        python: str,
-        python_callable: Callable,
-        snowflake_conn_id: str = 'snowflake_default',
-        use_dill: bool = False,
-        op_args: Collection[Any] | None = None,
-        op_kwargs: Mapping[str, Any] | None = None,
-        string_args: Iterable[str] | None = None,
-        templates_dict: dict | None = None,
-        templates_exts: list[str] | None = None,
-        expect_airflow: bool = True,
-        expect_pendulum: bool = False,
-        skip_on_exit_code: int | Container[int] | None = None,
+        # *,
+        # python: str,
+        # python_callable: Callable,
+        # snowflake_conn_id: str = 'snowflake_default',
+        # use_dill: bool = False,
+        # op_args: Collection[Any] | None = None,
+        # op_kwargs: Mapping[str, Any] | None = None,
+        # string_args: Iterable[str] | None = None,
+        # templates_dict: dict | None = None,
+        # templates_exts: list[str] | None = None,
+        # expect_airflow: bool = True,
+        # expect_pendulum: bool = False,
+        # skip_on_exit_code: int | Container[int] | None = None,
         **kwargs,
     ):
         
         super().__init__(
-            python_callable=python_callable,
-            python=python,
-            snowflake_conn_id=snowflake_conn_id,
-            use_dill=use_dill,
-            op_args=op_args,
-            op_kwargs=op_kwargs,
-            string_args=string_args,
-            templates_dict=templates_dict,
-            templates_exts=templates_exts,
-            expect_airflow=expect_airflow,
-            expect_pendulum=expect_pendulum,
-            skip_on_exit_code=skip_on_exit_code,
+            # python_callable=python_callable,
+            # python=python,
+            # snowflake_conn_id=snowflake_conn_id,
+            # use_dill=use_dill,
+            # op_args=op_args,
+            # op_kwargs=op_kwargs,
+            # string_args=string_args,
+            # templates_dict=templates_dict,
+            # templates_exts=templates_exts,
+            # expect_airflow=expect_airflow,
+            # expect_pendulum=expect_pendulum,
+            # skip_on_exit_code=skip_on_exit_code,
             **kwargs,
         )
+
 
 class SnowparkPythonOperator(SnowparkExternalPythonOperator):
     """
@@ -619,37 +642,296 @@ class SnowparkPythonOperator(SnowparkExternalPythonOperator):
         self,
         *,
         python: str = sys.executable,
-        python_callable: Callable,
-        snowflake_conn_id: str = 'snowflake_default',
-        use_dill: bool = False,
-        op_args: Collection[Any] | None = None,
-        op_kwargs: Mapping[str, Any] | None = None,
-        string_args: Iterable[str] | None = None,
-        templates_dict: dict | None = None,
-        templates_exts: list[str] | None = None,
-        expect_airflow: bool = True,
-        expect_pendulum: bool = False,
-        skip_on_exit_code: int | Container[int] | None = None,
-        show_return_value_in_logs: bool = True,
+        # python_callable: Callable,
+        # snowflake_conn_id: str = 'snowflake_default',
+        # use_dill: bool = False,
+        # op_args: Collection[Any] | None = None,
+        # op_kwargs: Mapping[str, Any] | None = None,
+        # string_args: Iterable[str] | None = None,
+        # templates_dict: dict | None = None,
+        # templates_exts: list[str] | None = None,
+        # expect_airflow: bool = True,
+        # expect_pendulum: bool = False,
+        # skip_on_exit_code: int | Container[int] | None = None,
+        # show_return_value_in_logs: bool = False,
         **kwargs,
     ) -> None:
 
+        #Older python versions may have snowpark in a virtualenv, for this operator it must be in base python
         if SnowparkSession is None:
             raise AirflowException("The snowflake-snowpark-python package is not installed.")
 
         super().__init__(
             python=python,
-            python_callable=python_callable,
-            snowflake_conn_id=snowflake_conn_id,
-            use_dill=use_dill,
-            op_args=op_args,
-            op_kwargs=op_kwargs,
-            string_args=string_args,
-            templates_dict=templates_dict,
-            templates_exts=templates_exts,
-            expect_airflow=expect_airflow,
-            expect_pendulum=expect_pendulum,
-            skip_on_exit_code=skip_on_exit_code,
-            show_return_value_in_logs=show_return_value_in_logs,
+            # python_callable=python_callable,
+            # snowflake_conn_id=snowflake_conn_id,
+            # use_dill=use_dill,
+            # op_args=op_args,
+            # op_kwargs=op_kwargs,
+            # string_args=string_args,
+            # templates_dict=templates_dict,
+            # templates_exts=templates_exts,
+            # expect_airflow=expect_airflow,
+            # expect_pendulum=expect_pendulum,
+            # skip_on_exit_code=skip_on_exit_code,
+            # show_return_value_in_logs=show_return_value_in_logs,
             **kwargs,
         )
+
+
+class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
+    """
+    Runs a function in a Snowpark Container runner service.  
+
+    The function must be defined using def, and not be
+    part of a class. All imports must happen inside the function
+    and no variables outside the scope may be referenced. A global scope
+    variable named virtualenv_string_args will be available (populated by
+    string_args). In addition, one can pass stuff through op_args and op_kwargs, and one
+    can use a return value.
+        
+    :param snowflake_conn_id: connection to use when running code within the Snowpark Container runner service.
+    :type snowflake_conn_id: str  (default is snowflake_default)
+    :param runner_service_name: Name of Airflow runner service in Snowpark Container services.  Must specify 
+    runner_service_name or runner_endpoint
+    :type runner_service_name: str
+    :param runner_endpoint: Endpoint URL of the instantiated Snowpark Container runner.  Must specify runner_endpoint or 
+    runner_service_name.
+    :type runner_endpoint: str
+    :param runner_headers: Optional OAUTH bearer token for Snowpark Container runner.  If runner_service_name is 
+    specified SnowparkContainersHook() will be used to pull the token just before running the task.
+    :type runner_headers: str
+    :param python_callable: Function to decorate
+    :type python_callable: Callable 
+    :param python_version: Python version (ie. '<maj>.<min>').  Callable will run in a PythonVirtualenvOperator on the runner.  
+        If not set will use default python version on runner.
+    :type python_version: str:
+    :param requirements: Optional list of python dependencies or a path to a requirements.txt file to be installed for the callable.
+    :type requirements: list | str
+    :param temp_data_output: If set to 'stage' or 'table' Snowpark DataFrame objects returned
+        from the operator will be serialized to the stage specified by 'temp_data_stage' or
+        a table with prefix 'temp_data_table_prefix'.
+    :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the database set at the operator or hook level.  If None, 
+        the operator will assume a default database is set in the Snowflake user preferences.
+    :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
+        not set the operator will use the schema set at the operator or hook level.  If None, 
+        the operator will assume a default schema is set in the Snowflake user preferences.
+    :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
+        must be set if temp_data_output == 'stage'.  Output location will be named for the task:
+        <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
+        
+        and a uri will be returned to Airflow xcom:
+        
+        snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
+
+    :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
+        must be set if temp_data_output == 'table'. Default: "XCOM_"
+
+        Output table will be named for the task:
+        <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
+
+        and the return value set to a SnowparkTable object with the fully-qualified table name.
+        
+        SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
+
+    :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
+    :param op_kwargs: a dictionary of keyword arguments that will get unpacked in your function (templated)
+    :type op_kwargs: dict
+    :param op_args: a list of positional arguments that will get unpacked when calling your callable (templated)
+    :type op_args: list
+    :param string_args: Strings that are present in the global var virtualenv_string_args,
+        available to python_callable at runtime as a list[str]. Note that args are split
+        by newline.
+    :type string_args: list
+    :param templates_dict: a dictionary where the values are templates that
+        will get templated by the Airflow engine sometime between
+        ``__init__`` and ``execute`` takes place and are made available
+        in your callable's context after the template has been applied
+    :type templates_dict: dict
+    :param templates_exts: a list of file extensions to resolve while
+        processing templated fields, for examples ``['.sql', '.hql']``
+    :type templates_exts: list
+    :param expect_airflow: expect Airflow to be installed in the target environment. If true, the operator
+        will raise warning if Airflow is not installed, and it will attempt to load Airflow
+        macros when starting.
+    :type expect_airflow: bool
+    """
+
+    #template_fields: Sequence[str] = tuple({"python"} | set(PythonOperator.template_fields))
+
+    def __init__(
+        self,
+        *,
+        # python_callable: Callable,
+        runner_service_name:str = None,
+        runner_endpoint: str = None,
+        runner_headers: dict = None,
+        # snowflake_conn_id: str = 'snowflake_default',
+        # log_level: str = 'ERROR',
+        python_version: str | None = None,
+        requirements: Iterable[str] | str = [],
+        # use_dill: bool = False,
+        pip_install_options: list[str] = [],
+        # op_args: Collection[Any] | None = None,
+        # op_kwargs: Mapping[str, Any] | None = None,
+        # string_args: Iterable[str] | None = None,
+        # templates_dict: dict | None = None,
+        # templates_exts: list[str] | None = None,
+        # expect_airflow: bool = False,
+        # expect_pendulum: bool = False,
+        **kwargs,
+    ):
+
+        if isinstance(requirements, str):
+            try: 
+                with open(requirements, 'r') as requirements_file:
+                    self.requirements = requirements_file.read().splitlines()
+            except:
+                raise FileNotFoundError(f'Specified requirements file {requirements} does not exist or is not readable.')
+        else:
+            assert isinstance(requirements, list), "requirements must be a list or filename."
+            self.requirements = requirements
+
+        # self.log_level = log_level                
+        self.runner_endpoint=runner_endpoint
+        self.runner_headers=runner_headers
+        self.runner_service_name=runner_service_name
+        self.pip_install_options = pip_install_options
+        # self.use_dill = use_dill
+        # self.snowflake_user_conn_params = hook._get_conn_params()
+        self.python_version = python_version
+        # self.expect_airflow = expect_airflow
+        # self.expect_pendulum = expect_pendulum
+        # self.string_args = string_args
+        # self.templates_dict = templates_dict
+        # self.templates_exts = templates_exts
+        self.system_site_packages = True
+        
+        super().__init__(
+            # python_callable=python_callable,
+            # snowflake_conn_id=snowflake_conn_id,
+            # use_dill = use_dill,
+            # op_args=op_args,
+            # op_kwargs=op_kwargs,
+            # string_args=string_args,
+            # templates_dict=templates_dict,
+            # templates_exts=templates_exts,
+            # expect_airflow = expect_airflow,
+            **kwargs,
+        )
+
+    def _build_payload(self, context):
+        
+        ####DEBUG####
+        ####DEBUG####
+        ####DEBUG####
+        print('####################')
+        print(self.test_kwargs)
+        print('####################')
+        ####DEBUG####
+        ####DEBUG####
+        ####DEBUG####
+
+        #some args are deserialized to objects depending on Airflow version.  Need to reserialize as json.
+        self.op_args = _serialize_table_args(self.op_args)
+        self.op_kwargs = _serialize_table_args(self.op_kwargs)
+
+        payload = dict(
+            python_callable_str = self.get_python_source(), 
+            python_callable_name = self.python_callable.__name__,
+            log_level = self.log_level,
+            requirements = self.requirements,
+            pip_install_options = self.pip_install_options,
+            snowflake_user_conn_params = self.conn_params,
+            temp_data_dict = self.temp_data_dict,
+            # use_dill = self.use_dill,
+            system_site_packages = self.system_site_packages,
+            python_version = self.python_version,
+            dag_id = self.dag_id,
+            task_id = self.task_id,
+            run_id = context['run_id'],
+            ts_nodash = context['ts_nodash'],
+            op_args = self.op_args,
+            op_kwargs = self.op_kwargs,
+            # templates_dict = self.templates_dict,
+            # templates_exts = self.templates_exts,
+            # expect_airflow = self.expect_airflow,
+            # expect_pendulum = self.expect_pendulum,
+            string_args = self.string_args,
+        )
+        
+        return payload
+
+    def _iter_serializable_context_keys(self):
+        yield from self.BASE_SERIALIZABLE_CONTEXT_KEYS
+        if self.system_site_packages or "apache-airflow" in self.requirements:
+            yield from self.AIRFLOW_SERIALIZABLE_CONTEXT_KEYS
+            yield from self.PENDULUM_SERIALIZABLE_CONTEXT_KEYS
+        elif "pendulum" in self.requirements:
+            yield from self.PENDULUM_SERIALIZABLE_CONTEXT_KEYS
+
+    def execute(self, context: Context) -> Any:
+        serializable_keys = set(self._iter_serializable_context_keys())
+        serializable_context = context_copy_partial(context, serializable_keys)
+
+        self.payload = self._build_payload(context)
+
+        return super().execute(context=serializable_context)
+
+    def execute_callable(self):
+
+        responses = asyncio.run(self._execute_python_callable_in_snowpark_container())
+
+        return responses
+        
+    async def _execute_python_callable_in_snowpark_container(self):
+
+        assert self.runner_service_name or self.runner_endpoint, "Must specify 'runner_service_name' or 'runner_endpoint'"
+
+        #pull oauth headers as soon as possible before execution due to timeout limits
+        if self.runner_service_name:
+            hook=SnowparkContainersHook(*self.conn_params, session_parameters={'PYTHON_CONNECTOR_QUERY_RESULT_FORMAT': 'json'})
+            urls, self.runner_headers = hook.get_service_urls(service_name=self.runner_service_name)
+            self.runner_endpoint = urls['airflow-task-runner']+'/task'
+
+        print(f"""
+        __________________________________
+        Running function {self.payload['python_callable_name']} in Snowpark Containers 
+        Task: {self.task_id}
+        Airflow Task Runner: {self.runner_endpoint}
+        __________________________________
+        """)
+
+        snowparktable_classname = SnowparkTable.__module__+'.'+SnowparkTable.__qualname__
+        allowed_deserialization_classes = conf.get("core", "allowed_deserialization_classes").split()
+
+        if any([re.compile(re.sub(r"(\w)\.", r"\1\..", p)).match(snowparktable_classname) for p in allowed_deserialization_classes]):
+            deserialize_args = True
+        else:
+            deserialize_args = False
+       
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect(self.runner_endpoint, headers=self.runner_headers) as ws:
+                await ws.send_json(self.payload)
+
+                async for msg in ws:
+                    if msg.type == aiohttp.WSMsgType.TEXT:
+                        response = json.loads(msg.data)
+
+                        if response['type'] in ["log", "execution_log", "infra"]:
+                            [self.log.info(line) for line in response['output'].splitlines()]
+                        
+                        if response['type'] == "error":
+                            [self.log.error(line) for line in response['output'].splitlines()]
+                            raise AirflowException("Error occurred in Task run.")
+
+                        if  response['type'] == 'results':
+                            return_value = json.loads(response['output'])
+                            if deserialize_args:
+                                return _deserialize_snowpark_tables(return_value)
+                            else:
+                                return return_value
+                                      
+                    elif msg.type == aiohttp.WSMsgType.ERROR:
+                        break

@@ -21,7 +21,7 @@ def get_provider_info():
             },
             {
                 "name": "snowpark_containers_python",
-                "class-name": "astronomer.providers.snowflake.decorators.snowpark_containers.snowpark_containers_python_task",
+                "class-name": "astronomer.providers.snowflake.decorators.snowpark.snowpark_containers_python_task",
             },
         ],
     }
