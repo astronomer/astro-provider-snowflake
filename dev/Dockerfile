@@ -1,9 +1,8 @@
 # syntax=quay.io/astronomer/airflow-extensions:latest
 
-#pinned at 7.5.0 for python3.9 as currently limited by snowpark client libs
 FROM quay.io/astronomer/astro-runtime:7.5.0-base
 
-COPY include/astro_provider_snowflake-0.0.1a1-py3-none-any.whl /tmp
+COPY include/astro_provider_snowflake-0.0.0-py3-none-any.whl /tmp
 
 PYENV 3.8 snowpark requirements-snowpark.txt
 

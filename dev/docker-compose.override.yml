@@ -2,11 +2,26 @@ version: '3.1'
 services:
   scheduler:
     environment:
-      AIRFLOW_CONN_SNOWFLAKE_DEFAULT: ${AIRFLOW_CONN_SNOWFLAKE_DEFAULT}
-      # AIRFLOW__CORE__XCOM_BACKEND: 'astronomer.providers.snowflake.xcom_backends.snowflake.SnowflakeXComBackend'
-      AIRFLOW__CORE__XCOM_SNOWFLAKE_TABLE: 'SISSYG.XCOM.XCOM_TABLE'
-      AIRFLOW__CORE__XCOM_SNOWFLAKE_STAGE: 'SISSYG.XCOM.XCOM_STAGE'
+      TEST_DATABASE: ${TEST_DATABASE}
+      TEST_SCHEMA: ${TEST_SCHEMA}
+      AIRFLOW__CORE__XCOM_BACKEND: 'astronomer.providers.snowflake.xcom_backends.snowflake.SnowflakeXComBackend'
+      AIRFLOW__CORE__XCOM_SNOWFLAKE_TABLE: '${TEST_DATABASE}.${TEST_SCHEMA}.XCOM_TABLE'
+      AIRFLOW__CORE__XCOM_SNOWFLAKE_STAGE: '${TEST_DATABASE}.${TEST_SCHEMA}.XCOM_STAGE'
       AIRFLOW__CORE__XCOM_SNOWFLAKE_CONN_NAME: 'snowflake_default'
+      AIRFLOW_CONN_SNOWFLAKE_DEFAULT: ${AIRFLOW_CONN_SNOWFLAKE_DEFAULT}
+      AIRFLOW__CORE__ALLOWED_DESERIALIZATION_CLASSES: airflow\.* astro\.* include\.astro\.*
     # volumes:
     #   - ${PWD}/../provider/astronomer/providers/snowflake:/usr/local/lib/python3.9/site-packages/astronomer/providers/snowflake
     #   - ${PWD}/../provider/astronomer/providers/snowflake:/usr/local/lib/python3.8/site-packages/astronomer/providers/snowflake
+  airflow-task-runner:
+    image: airflow-runner:local
+    build: ./include/airflow_task_runner
+    environment:
+      PYTHONUNBUFFERED: 1
+    # volumes:
+    # - ${PWD}/include/airflow_task_runner/xcom:/xcom
+    # - ${PWD}/include/airflow_task_runner/src:/app
+    networks:
+      - airflow
+    ports:
+    - 8001:8001

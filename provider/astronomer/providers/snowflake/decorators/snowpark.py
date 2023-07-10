@@ -495,18 +495,12 @@ class SnowparkContainersPythonDecoratedOperator(DecoratedOperator, SnowparkConta
 
     def __init__(self, 
                  *, 
-                 #runner_service_name, runner_endpoint, runner_headers, 
                  python_callable, 
-                #  python_version, 
                  op_args, 
                  op_kwargs, 
                  **kwargs) -> None:
         kwargs_to_upstream = {
-            # "runner_service_name": runner_service_name,
-            # "runner_endpoint": runner_endpoint,
-            # "runner_headers": runner_headers,
             "python_callable": python_callable,
-            # "python_version": python_version,
             "op_args": op_args,
             "op_kwargs": op_kwargs,
         }
@@ -526,12 +520,6 @@ class SnowparkContainersPythonDecoratedOperator(DecoratedOperator, SnowparkConta
 
 
 def snowpark_containers_python_task(
-    # runner_service_name: str | None = None,
-    # runner_endpoint: str | None = None,
-    # runner_headers: str | None = None,
-    # python_version: str | None = None,
-    # python_callable: Callable | None = None,
-    # snowflake_conn_id:str = 'snowflake_default',
     multiple_outputs: bool = False,
     **kwargs,
 ) -> TaskDecorator:
@@ -599,11 +587,6 @@ def snowpark_containers_python_task(
     :type multiple_outputs: bool
     """
     return task_decorator_factory(
-        # runner_service_name=runner_service_name,
-        # runner_endpoint=runner_endpoint,
-        # runner_headers=runner_headers, 
-        # python_version=python_version,
-        # python_callable=python_callable,
         multiple_outputs=multiple_outputs,
         decorated_operator_class=SnowparkContainersPythonDecoratedOperator,
         **kwargs,
