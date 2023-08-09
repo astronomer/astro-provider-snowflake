@@ -20,7 +20,7 @@
 # _SNOWPARK_BIN = '/home/astro/.venv/snowpark/bin/python'
 
 # @dag(
-#     default_args={"owner": "Airflow", 
+#     default_args={"owner": "Airflow",
 #                   "temp_data_output": 'table',
 #                   "temp_data_schema": 'xcom',
 #                   "temp_data_overwrite": True},

@@ -10,12 +10,12 @@ try:
     from snowflake.snowpark import Session as SnowparkSession
     from snowflake.snowpark import functions as F
     from snowflake.snowpark import types as T
-except: 
+except:
     raise Exception('Snowpark libraries are not installed in the environment.')
 
 try:
     from astro.sql.table import Table, TempTable
-except: 
+except:
     Table = TempTable = None
 
 from astronomer.providers.snowflake.utils.snowpark_helpers import (

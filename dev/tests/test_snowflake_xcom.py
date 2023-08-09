@@ -1,28 +1,27 @@
 import os
+
 import numpy as np
-import json
 import pandas as pd
-from astro.files import File
-from astro.table import Table, TempTable, Metadata
 from airflow.models.dataset import Dataset
-from astronomer.providers.snowflake import SnowparkTable
+from astro.files import File
+from astro.table import Metadata, Table
+
+os.environ["AIRFLOW__CORE__XCOM_SNOWFLAKE_CONN_NAME"] = "snowflake_default"
+os.environ["AIRFLOW__CORE__XCOM_SNOWFLAKE_TABLE"] = "AIRFLOW_XCOM.PUBLIC.XCOM_TABLE"
+os.environ[
+    "AIRFLOW__CORE__XCOM_BACKEND"
+] = "astronomer.providers.snowflake.xcom_backends.snowflake.SnowflakeXComBackend"
+os.environ["AIRFLOW__CORE__XCOM_SNOWFLAKE_STAGE"] = "AIRFLOW_XCOM.PUBLIC.XCOM_STAGE"
 
 
-
-os.environ['AIRFLOW__CORE__XCOM_SNOWFLAKE_CONN_NAME']='snowflake_default'
-os.environ['AIRFLOW__CORE__XCOM_SNOWFLAKE_TABLE']='AIRFLOW_XCOM.PUBLIC.XCOM_TABLE' 
-os.environ['AIRFLOW__CORE__XCOM_BACKEND']='astronomer.providers.snowflake.xcom_backends.snowflake.SnowflakeXComBackend'
-os.environ['AIRFLOW__CORE__XCOM_SNOWFLAKE_STAGE']='AIRFLOW_XCOM.PUBLIC.XCOM_STAGE' 
-
-
-#from astronomer.providers.snowflake.xcom_backends.snowflake import SnowflakeXComBackend
+# from astronomer.providers.snowflake.xcom_backends.snowflake import SnowflakeXComBackend
 self = SnowflakeXComBackend()
 
-dag_id='test_dag_id'
-task_id='test_task_id'
-run_id='test_run_id'
-multi_index=-1
-key='mykey'
+dag_id = "test_dag_id"
+task_id = "test_task_id"
+run_id = "test_run_id"
+multi_index = -1
+key = "mykey"
 
 # value = "some crazy junk"
 # uri = self._serialize(value=value, dag_id=dag_id, task_id=task_id, run_id=run_id, multi_index=multi_index, key='mykey')
@@ -74,15 +73,15 @@ key='mykey'
 # test_dict = self._deserialize(uri)
 # assert large_dict == test_dict
 
-list_value=[{"a": 1, "b": 1}, {"a": 2, "b": 4}, {"a": 3, "b": 9}]
+list_value = [{"a": 1, "b": 1}, {"a": 2, "b": 4}, {"a": 3, "b": 9}]
 # uri = self._serialize(value=list_value, dag_id=dag_id, task_id=task_id, run_id=run_id, multi_index=multi_index, key='mylistkey')
 # assert list_value == self._deserialize(uri)
 
-np_value=np.array(list_value)
+np_value = np.array(list_value)
 # uri = self._serialize(value=np_value, dag_id=dag_id, task_id=task_id, run_id=run_id, multi_index=multi_index, key='mynp')
 # assert np_value == self._deserialize(uri)
 
-df_value=pd.DataFrame(list_value)
+df_value = pd.DataFrame(list_value)
 # uri = self._serialize(df_value, key, dag_id, task_id, run_id, multi_index)
 # assert df_value == self._deserialize(uri)
 
@@ -99,33 +98,80 @@ df_value=pd.DataFrame(list_value)
 
 
 empty_value = None
-uri = self._serialize(value=empty_value, dag_id=dag_id, task_id=task_id, run_id=run_id, multi_index=multi_index, key='mynone')
+uri = self._serialize(
+    value=empty_value,
+    dag_id=dag_id,
+    task_id=task_id,
+    run_id=run_id,
+    multi_index=multi_index,
+    key="mynone",
+)
 assert empty_value == self._deserialize(uri)
 
-empty_string = ''
-uri = self._serialize(value=empty_string, dag_id=dag_id, task_id=task_id, run_id=run_id, multi_index=multi_index, key='mynostr')
+empty_string = ""
+uri = self._serialize(
+    value=empty_string,
+    dag_id=dag_id,
+    task_id=task_id,
+    run_id=run_id,
+    multi_index=multi_index,
+    key="mynostr",
+)
 assert empty_string == self._deserialize(uri)
 
-tp_value = ('x', 'y')
-uri = self._serialize(value=tp_value, dag_id=dag_id, task_id=task_id, run_id=run_id, multi_index=multi_index, key='mytp')
+tp_value = ("x", "y")
+uri = self._serialize(
+    value=tp_value,
+    dag_id=dag_id,
+    task_id=task_id,
+    run_id=run_id,
+    multi_index=multi_index,
+    key="mytp",
+)
 assert tp_value == self._deserialize(uri)
 
-tpn_value = ('x', None, [])
-uri = self._serialize(value=tpn_value, dag_id=dag_id, task_id=task_id, run_id=run_id, multi_index=multi_index, key='mytpn')
+tpn_value = ("x", None, [])
+uri = self._serialize(
+    value=tpn_value,
+    dag_id=dag_id,
+    task_id=task_id,
+    run_id=run_id,
+    multi_index=multi_index,
+    key="mytpn",
+)
 assert tpn_value == self._deserialize(uri)
 
 complex_value = (list_value, np_value, df_value)
-uris = self.serialize_value(value=complex_value, dag_id=dag_id, task_id=task_id, run_id=run_id, multi_index=multi_index, key='mycomplextp')
+uris = self.serialize_value(
+    value=complex_value,
+    dag_id=dag_id,
+    task_id=task_id,
+    run_id=run_id,
+    multi_index=multi_index,
+    key="mycomplextp",
+)
 # assert complex_value == self.deserialize_value(uris.decode())
 
-table_value=Table(name='TAXI_RAW', conn_id='snowflake_default', metadata=Metadata(schema='', database='SANDBOX'), columns=[], temp=False)
-uri = self._serialize(value=table_value, dag_id=dag_id, task_id=task_id, run_id=run_id, multi_index=multi_index, key='mytbl')
+table_value = Table(
+    name="TAXI_RAW",
+    conn_id="snowflake_default",
+    metadata=Metadata(schema="", database="SANDBOX"),
+    columns=[],
+    temp=False,
+)
+uri = self._serialize(
+    value=table_value,
+    dag_id=dag_id,
+    task_id=task_id,
+    run_id=run_id,
+    multi_index=multi_index,
+    key="mytbl",
+)
 assert table_value == self._deserialize(uri)
 
-value=File('/tmp')
+value = File("/tmp")
 
-value=Dataset('s3://tmp', extra={'x':'1'})
-
+value = Dataset("s3://tmp", extra={"x": "1"})
 
 
 # from unittest import mock
@@ -299,5 +345,3 @@ value=Dataset('s3://tmp', extra={'x':'1'})
 #         cur.execute_async.assert_has_calls([mock.call(query) for query in expected_sql])
 #         assert hook.query_ids == expected_query_ids
 #         cur.close.assert_called()
-
-
