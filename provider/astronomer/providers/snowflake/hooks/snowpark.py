@@ -1,18 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
 from uuid import uuid4
 
 import yaml
-
-try:
-    pass
-except:
-    pass
-import logging
 
 for logger_name in ("snowflake.snowpark", "snowflake.connector"):
     logger = logging.getLogger(logger_name)
@@ -237,12 +232,12 @@ class SnowparkContainersHook(SnowflakeHook):
 
     def list_repositories(
         self,
-        name_prefix: str = None,
-        repository_name: str = None,
-        database: str = None,
-        schema: str = None,
-        limit: int = None,
-    ) -> dict or None:
+        name_prefix: str | None = None,
+        repository_name: str | None = None,
+        database: str | None = None,
+        schema: str | None = None,
+        limit: int | None = None,
+    ) -> dict | None:
         """
         Return a dictionary of existing Snowpark Container repositories.
 
@@ -279,7 +274,10 @@ class SnowparkContainersHook(SnowflakeHook):
         return response
 
     def get_repo_url(
-        self, repository_name: str, database: str = None, schema: str = None
+        self,
+        repository_name: str,
+        database: str | None = None,
+        schema: str | None = None,
     ):
         """
         Returns a properly formatted URL for docker login, push, pull, etc.
@@ -310,7 +308,10 @@ class SnowparkContainersHook(SnowflakeHook):
         return repository_url
 
     def remove_repository(
-        self, repository_name: str, database: str = None, schema: str = None
+        self,
+        repository_name: str,
+        database: str | None = None,
+        schema: str | None = None,
     ):
         """
         Drop an existing Snowpark Container repository.
@@ -343,11 +344,11 @@ class SnowparkContainersHook(SnowflakeHook):
         spec_file_name: str,
         repository_name: str,
         pool_name: str,
-        database: str = None,
-        schema: str = None,
+        database: str | None = None,
+        schema: str | None = None,
         replace_existing: bool = True,
-        min_inst=1,
-        max_inst=1,
+        min_inst: int = 1,
+        max_inst: int = 1,
     ) -> str:
         """
         Create a Snowpark Container service.
@@ -428,8 +429,8 @@ class SnowparkContainersHook(SnowflakeHook):
     def suspend_service(
         self,
         service_name: str,
-        database: str = None,
-        schema: str = None,
+        database: str | None = None,
+        schema: str | None = None,
     ):
         """
         Suspend a running Snowpark Container service.
@@ -455,8 +456,8 @@ class SnowparkContainersHook(SnowflakeHook):
     def resume_service(
         self,
         service_name: str,
-        database: str = None,
-        schema: str = None,
+        database: str | None = None,
+        schema: str | None = None,
     ):
         """
         Resume a suspend Snowpark Container service.
@@ -483,8 +484,8 @@ class SnowparkContainersHook(SnowflakeHook):
     def remove_service(
         self,
         service_name: str,
-        database: str = None,
-        schema: str = None,
+        database: str | None = None,
+        schema: str | None = None,
     ):
         """
         Remove a Snowpark Container service.
@@ -510,13 +511,13 @@ class SnowparkContainersHook(SnowflakeHook):
 
     def list_services(
         self,
-        service_name: str = None,
-        database: str = None,
-        schema: str = None,
-        name_prefix: str = None,
-        limit: int = None,
-        status: str = None,
-        quiet: bool = False,
+        service_name: str | None = None,
+        database: str | None = None,
+        schema: str | None = None,
+        name_prefix: str | None = None,
+        limit: int | None = None,
+        status: str | None = None,
+        quiet: bool | None = False,
     ) -> dict:
         """
         Return a dictionary of existing Snowpark Container services.
@@ -594,9 +595,9 @@ class SnowparkContainersHook(SnowflakeHook):
     def get_service_logs(
         self,
         service_name: str,
-        database: str = None,
-        schema: str = None,
-    ) -> dict or None:
+        database: str | None = None,
+        schema: str | None = None,
+    ) -> dict | None:
         """
         Return a string of container logs for existing Snowpark Container services.
 
@@ -637,7 +638,7 @@ class SnowparkContainersHook(SnowflakeHook):
 
         return logs
 
-    def get_service_urls(self, service_name: str) -> tuple(dict, dict):
+    def get_service_urls(self, service_name: str) -> tuple[dict, dict]:
         urls = self.list_services(service_name=service_name)[service_name.upper()].get(
             "public_endpoints"
         )
@@ -647,11 +648,11 @@ class SnowparkContainersHook(SnowflakeHook):
 
     def push_images(
         self,
-        service_name: str = None,
-        spec_file_name: str = None,
-        repository_name: str = None,
-        database: str = None,
-        schema: str = None,
+        service_name: str | None = None,
+        spec_file_name: str | None = None,
+        repository_name: str | None = None,
+        database: str | None = None,
+        schema: str | None = None,
         image_sources: list = [],
     ) -> dict:
         """

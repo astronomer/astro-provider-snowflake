@@ -7,16 +7,16 @@ from attr import define, field
 
 try:
     from astro.files import File
-except:
+except ImportError:
     File = None
 try:
     from astro.table import Table, TempTable
-except:
+except ImportError:
     Table = None
     TempTable = None
 try:
     from airflow.models.dataset import Dataset
-except:
+except ImportError:
     Dataset = None
 
 
@@ -165,7 +165,7 @@ def _try_parse_snowflake_xcom_uri(value: str) -> Any:
             "xcom_key": xcom_key,
         }
 
-    except:
+    except Exception:
         return False
 
 
@@ -229,7 +229,7 @@ def _write_snowpark_dataframe(
         schema = temp_data_dict.get(
             "temp_data_schema"
         ) or snowpark_session.get_current_schema().replace('"', "")
-    except:
+    except Exception:
         assert (
             database and schema
         ), "To serialize Snowpark dataframes the database and schema must be set in temp_data params, operator/decorator, hook or Snowflake user session defaults."

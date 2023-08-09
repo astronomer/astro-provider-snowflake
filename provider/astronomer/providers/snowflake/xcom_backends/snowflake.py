@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 import numpy
 import pandas
 from airflow.models.xcom import BaseXCom
+from sqlalchemy.sql.base import ExecutableOption
 
 if TYPE_CHECKING:
     from airflow.models.xcom import XCom
@@ -25,16 +26,16 @@ from astronomer.providers.snowflake.utils.xcom_helpers import (
 
 try:
     from astro.files import File
-except:
+except ImportError:
     File = None
 try:
     from astro.table import Table, TempTable
-except:
+except ImportError:
     Table = None
     TempTable = None
 try:
     from airflow.models.dataset import Dataset
-except:
+except ImportError:
     Dataset = None
 
 _ENCODING = "utf-8"
@@ -96,7 +97,7 @@ def _write_to_snowflake(
                 # return for recursion on Iterable
                 return False
             else:
-                raise e()
+                raise
 
     if (
         json_serializable
@@ -272,7 +273,7 @@ def _read_from_snowflake(
                 return getattr(sys.modules["builtins"], ret_value_type)(
                     json.loads(ret_value)
                 )
-            except:
+            except Exception:
                 raise AirflowException(
                     f"Cannot parse URI for file type {ret_value_type}"
                 )

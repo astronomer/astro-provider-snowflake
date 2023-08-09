@@ -35,7 +35,7 @@ from astronomer.providers.snowflake.utils.snowpark_helpers import (
 
 try:
     from astro.sql.table import Table, TempTable
-except:
+except ImportError:
     Table = None  # type: ignore
     TempTable = None  # type: ignore
 
@@ -118,10 +118,10 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         self,
         *,
         snowflake_conn_id: str = "snowflake_default",
-        temp_data_output: str = None,
-        temp_data_db: str = None,
-        temp_data_schema: str = None,
-        temp_data_stage: str = None,
+        temp_data_output: str | None = None,
+        temp_data_db: str | None = None,
+        temp_data_schema: str | None = None,
+        temp_data_stage: str | None = None,
         temp_data_table_prefix: str = "XCOM_",
         temp_data_overwrite: bool = False,
         show_return_value_in_logs: bool = False,
@@ -662,9 +662,9 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
     def __init__(
         self,
         *,
-        runner_service_name: str = None,
-        runner_endpoint: str = None,
-        runner_headers: dict = None,
+        runner_service_name: str | None = None,
+        runner_endpoint: str | None = None,
+        runner_headers: dict | None = None,
         python_version: str | None = None,
         requirements: Iterable[str] | str = [],
         pip_install_options: list[str] = [],
@@ -674,7 +674,7 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
             try:
                 with open(requirements) as requirements_file:
                     self.requirements = requirements_file.read().splitlines()
-            except:
+            except Exception:
                 raise FileNotFoundError(
                     f"Specified requirements file {requirements} does not exist or is not readable."
                 )

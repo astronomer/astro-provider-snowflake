@@ -1,3 +1,6 @@
+from sqlalchemy.sql import Executable
+
+
 try:
     import docker
 except ImportError:
@@ -14,7 +17,7 @@ def docker_ls(image_name: str) -> bool:
     client = docker.from_env()
     try:
         return client.images.get(image_name)
-    except:
+    except Exception:
         return False
 
 
