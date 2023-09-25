@@ -80,6 +80,8 @@ class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator
                  **kwargs
             ) -> None:
         
+        self.doc_md = python_callable.__doc__
+
         kwargs_to_upstream = {
             "python_callable": python_callable,
             "op_args": op_args,
@@ -237,7 +239,9 @@ class _SnowparkVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirtualenv
                  op_kwargs, 
                  **kwargs
             ) -> None:
-         
+
+        self.doc_md = python_callable.__doc__
+
         kwargs_to_upstream = {
             "python_callable": python_callable,
             "op_args": op_args,
@@ -392,7 +396,9 @@ class _SnowparkExternalPythonDecoratedOperator(DecoratedOperator, SnowparkExtern
                  op_kwargs, 
                  **kwargs
             ) -> None:
-         
+        
+        self.doc_md = python_callable.__doc__
+
         kwargs_to_upstream = {
             "python_callable": python_callable,
             "op_args": op_args,
@@ -499,6 +505,9 @@ class SnowparkContainersPythonDecoratedOperator(DecoratedOperator, SnowparkConta
                  op_args, 
                  op_kwargs, 
                  **kwargs) -> None:
+        
+        self.doc_md = python_callable.__doc__
+        
         kwargs_to_upstream = {
             "python_callable": python_callable,
             "op_args": op_args,

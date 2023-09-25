@@ -42,6 +42,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+snowpark = ["snowflake-snowpark-python>=1.4"]
 docs = [
     "pydata_sphinx_theme",
     "sphinx",

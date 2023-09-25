@@ -123,6 +123,11 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         will raise warning if Airflow is not installed, and it will attempt to load Airflow
         macros when starting.
     """
+    ui_color = "#e1f5fc" #Light
+    # ui_color = "#29b5e8" #Medium
+    # ui_color = "#29b5e8" #dark
+
+    operator_extra_links = (SnowparkOperatorExtraLink(),)
 
     def __init__(
         self,
