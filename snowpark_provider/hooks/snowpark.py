@@ -549,7 +549,7 @@ class SnowparkContainersHook(SnowflakeHook):
         :param schema: Optional: Schema of the repository.
         :type schema: str
         """
-        from astronomer.providers.snowflake.utils.docker_helpers import (
+        from snowpark_provider.utils.docker_helpers import (
             docker_ls,
             docker_pull,
             docker_push

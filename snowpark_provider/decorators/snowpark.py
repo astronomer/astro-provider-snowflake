@@ -7,7 +7,7 @@ from textwrap import dedent
 from airflow.decorators.base import DecoratedOperator, TaskDecorator, task_decorator_factory
 from airflow.utils.decorators import remove_task_decorator
 
-from astronomer.providers.snowflake.operators.snowpark import (
+from snowpark_provider.operators.snowpark import (
     SnowparkVirtualenvOperator, 
     SnowparkExternalPythonOperator,
     SnowparkPythonOperator,

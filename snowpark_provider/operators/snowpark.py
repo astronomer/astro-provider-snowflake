@@ -31,23 +31,12 @@ from airflow.exceptions import (
 )
 
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
-from astronomer.providers.snowflake.hooks.snowpark import SnowparkContainersHook
-from astronomer.providers.snowflake.utils.snowpark_helpers import (
-    SnowparkTable,
-    _try_parse_snowflake_xcom_uri,
-    _is_table_arg,
-    _deserialize_snowpark_args,
-    _write_snowpark_dataframe,
-    _serialize_snowpark_results,
+from snowpark_provider.hooks.snowpark import SnowparkContainersHook
+from snowpark_provider import SnowparkTable
+from snowpark_provider.utils.snowpark_helpers import (
     _deserialize_snowpark_tables,
     _serialize_table_args
 )
-
-try:
-    from astro.sql.table import Table, TempTable
-except:
-    Table = None    # type: ignore
-    TempTable = None # type: ignore
 
 try:
     from snowflake.snowpark import Session as SnowparkSession
@@ -186,7 +175,7 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         Conn params may come from the hook or set in the operator/decorator.
         Some params (ie. warehouse, database, schema, etc) can be None as these are set in Snowflake defaults.
         Some regions (ie. us-west-2) do not except a region param.  Account must be fully qualified instead.
-        Table or SnowparkTable class can also override this in get_fq_table_name()
+        SnowparkTable class can also override this in get_fq_table_name()
 
         """
 
@@ -317,9 +306,9 @@ class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator
     Runs a Snowflake Snowpark Python function in a virtualenv that is created and destroyed automatically.
 
     Instantiates a Snowpark Session named 'snowpark_session' and attempts to create Snowpark Dataframes 
-    from any SnowparTable or Astro Python SDK Table type annotated arguments.
+    from any SnowparTable type annotated arguments.
 
-    The virtualenv must have this package or Astro SDK installed in order pass table args.
+    The virtualenv must have this package installed in order pass table args.
 
     If an existing virtualenv has all necessary packages consider using the SnowparkExternalPythonOperator.
 
@@ -412,9 +401,9 @@ class SnowparkExternalPythonOperator(ExternalPythonOperator, _BaseSnowparkOperat
     Runs a Snowflake Snowpark Python function with a preexisting python environment.
 
     Instantiates a Snowpark Session named 'snowpark_session' and attempts to create Snowpark Dataframes 
-    from any SnowparTable or Astro Python SDK Table type annotated arguments.
+    from any SnowparTable type annotated arguments.
     
-    The virtualenv must have this package or Astro SDK installed in order pass table args.
+    The virtualenv must have this package installed in order pass table args.
 
     If an existing virtualenv is not available consider using the SnowparkVirtualenvPythonOperator.
 

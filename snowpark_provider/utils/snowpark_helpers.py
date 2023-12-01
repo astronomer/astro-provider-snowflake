@@ -1,103 +1,17 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from urllib import parse as parser
-from attr import define, field
 
-try:
-    from astro.files import File
-except: 
-    File = None
-try: 
-    from astro.table import Table, TempTable
-except:
-    Table = None
-    TempTable = None
-try: 
-    from airflow.models.dataset import Dataset
-except: 
-    Dataset = None
-
-@define
-class Metadata:
-    schema: str | None = None
-    database: str | None = None
-
-@define(slots=False)
-class SnowparkTable:
-    """
-    This class allows the Snowpark operators and decorators to create instances of Snowpark Dataframes 
-    for any arguments passed to the python callable.
-
-    It is a slim version of the Astro Python SDK Table class.  Therefore users can pass either astro.sql.table.Table or 
-    astronomer.providers.snowflake.SnowparkTable objects as arguments interchangeably. 
-    
-    """
-
-    template_fields = ("name",)
-    name: str = field(default="")
-    uri: str = field(default="")
-    extra: dict | None = field(default="")
-    conn_id: str = field(default="")
-
-    # Setting converter allows passing a dictionary to metadata arg
-    metadata: Metadata = field(
-        factory=Metadata,
-        converter=lambda val: Metadata(**val) if isinstance(val, dict) else val,
-    )
-
-    # We need this method to pickle SnowparkTable object, without this we cannot push/pull this object from xcom.
-    def __getstate__(self):
-        return self.__dict__
-
-    def to_json(self):
-        return {
-            "class": "SnowparkTable",
-            "name": self.name,
-            "uri": self.uri,
-            "extra": self.extra,
-            "metadata": {
-                "schema": self.metadata.schema,
-                "database": self.metadata.database,
-            },
-            "conn_id": self.conn_id,
-        }
-
-    @classmethod
-    def from_json(cls, obj: dict):
-        return SnowparkTable(
-            name=obj["name"],
-            uri=obj["uri"],
-            extra=obj["extra"],
-            metadata=Metadata(**obj["metadata"]),
-            conn_id=obj["conn_id"],
-        )
-    
-    def serialize(self) -> dict[str, Any]:
-        return {
-            "name": self.name,
-            "uri": self.uri,
-            "extra": self.extra,
-            "conn_id": self.conn_id,
-            "metadata": {"schema": self.metadata.schema, "database": self.metadata.database},
-        }
-
-    @staticmethod
-    def deserialize(data: dict[str, Any], version:int):
-        return SnowparkTable(
-            name=data["name"],
-            uri=data["uri"],
-            extra=data["extra"],
-            conn_id=data["conn_id"],
-            metadata=Metadata(**data["metadata"]),
-        )
+from snowpark_provider import SnowparkTable
+from snowflake.snowpark.session import Session as SnowparkSession
+from snowflake.snowpark.dataframe import DataFrame as SnowparkDataFrame
 
 def _is_table_arg(arg:Any):
-    if ((Table or TempTable) and isinstance(arg, (Table, TempTable))) \
-            or (SnowparkTable and isinstance(arg, SnowparkTable)):
+    if isinstance(arg, SnowparkTable):
         arg=arg.to_json()
 
-    if isinstance(arg, dict) and arg.get("class", "") in ["SnowparkTable", "Table", "TempTable"]:
+    if isinstance(arg, dict) and arg.get("class", "") in ["SnowparkTable"]:
 
         if _try_parse_snowflake_xcom_uri(arg.get('uri', '')):
             return arg['uri']
@@ -184,7 +98,7 @@ def _deserialize_snowpark_args(arg:Any, snowpark_session:SnowparkSession, conn_p
     else:
         return arg
 
-def _write_snowpark_dataframe(spdf:Snowpark_DataFrame, 
+def _write_snowpark_dataframe(spdf:SnowparkDataFrame, 
                               snowpark_session:SnowparkSession, 
                               temp_data_dict:dict, 
                               conn_params:dict, 
@@ -308,10 +222,9 @@ def _serialize_snowpark_results(res:Any,
 
 def _serialize_table_args(arg:Any):
     """
-    Recursively serializes Table, TempTable and SnowparkTable objects to json
+    Recursively serializes SnowparkTable objects to json
     """
-    if ((Table or TempTable) and isinstance(arg, (Table, TempTable))) \
-            or isinstance(arg, SnowparkTable): 
+    if isinstance(arg, SnowparkTable): 
         return arg.to_json()
             
     elif isinstance(arg, dict):
@@ -338,10 +251,6 @@ def _deserialize_snowpark_tables(arg:Any):
     if isinstance(arg, dict):
         if arg.get("class", "") == "SnowparkTable":
             return SnowparkTable.from_json(arg)
-        elif Table and arg.get("class", "") == "Table":
-            return Table.from_json(arg)
-        elif TempTable and arg.get("class", "") == "TempTable":
-            return TempTable.from_json(arg)
         else:
             tmp = {}
             for k, v in arg.items():

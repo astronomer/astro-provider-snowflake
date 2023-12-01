@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from urllib import parse as parser
 import os
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from airflow.exceptions import AirflowException
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook

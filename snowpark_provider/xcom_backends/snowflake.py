@@ -16,18 +16,12 @@ if TYPE_CHECKING:
 
 from airflow.exceptions import AirflowException
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
-from astronomer.providers.snowflake.utils.snowpark_helpers import SnowparkTable
-from astronomer.providers.snowflake.utils.xcom_helpers import _try_parse_snowflake_xcom_uri, get_snowflake_xcom_objects
+from snowpark_provider import SnowparkTable
+from snowpark_provider.utils.xcom_helpers import (
+    _try_parse_snowflake_xcom_uri, 
+    get_snowflake_xcom_objects
+)
 
-try:
-    from astro.files import File
-except: 
-    File = None
-try: 
-    from astro.table import Table, TempTable
-except:
-    Table = None
-    TempTable = None
 try: 
     from airflow.models.dataset import Dataset
 except: 
@@ -117,7 +111,8 @@ def _write_to_snowflake(
 
     else:
         with tempfile.TemporaryDirectory() as td:
-            if 'json_str' in locals(): #large data or non-serializable use pickle
+            if 'json_str' in locals(): 
+                #large data or non-serializable use pickle
                 temp_file = Path(f'{td}/{key}.pickle')
                 with open(temp_file, 'wb') as tf:
                     pickle.dump(value, tf)
@@ -149,10 +144,7 @@ def _write_to_snowflake(
     
 def _serialize_table_values(value:Any):
 
-    if any((isinstance(value, SnowparkTable), 
-            (File and isinstance(value, File)), 
-            (Table and isinstance(value, Table)), 
-            (TempTable and isinstance(value, TempTable)))):
+    if isinstance(value, SnowparkTable):
         return value.to_json()
     
     if isinstance(value, dict):
@@ -209,7 +201,7 @@ def _read_from_snowflake(parsed_uri: str, hook:SnowflakeHook, snowflake_xcom_obj
             
             elif ret_value_type == 'dict':
                 class_type = json.loads(ret_value).get('class')
-                if class_type in ('File', 'Table', 'TempTable', 'SnowparkTable'):
+                if class_type in ('SnowparkTable'):
                     obj_type = globals().get(class_type, None)
                     if obj_type:
                         return obj_type.from_json((json.loads(ret_value)))
@@ -357,7 +349,7 @@ class SnowflakeXComBackend(BaseXCom):
 
         multi_index = 0
 
-        #first serialize any Table, TempTable, File or SnowparkTable values to json with their serializers
+        #first serialize any SnowparkTable values to json with their serializers
         value = _serialize_table_values(value)
 
         #try to serialize the whole value and then recurse over iterable if necessary
