@@ -1,0 +1,1 @@
+include snowpark_provider/operators/snowpark_virtualenv_script.jinja2
