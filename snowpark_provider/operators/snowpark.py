@@ -8,6 +8,7 @@ from typing import Any, Iterable, Sequence
 from collections.abc import Container
 import subprocess
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import json
 import re
 
@@ -252,53 +253,55 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
 
         return super().execute(context=serializable_context)
 
-    def _execute_python_callable_in_subprocess(self, python_path: Path, tmp_dir: Path):
-        op_kwargs: dict[str, Any] = {k: v for k, v in self.op_kwargs.items()}
-        if self.templates_dict:
-            op_kwargs["templates_dict"] = self.templates_dict
-        input_path = tmp_dir / "script.in"
-        output_path = tmp_dir / "script.out"
-        string_args_path = tmp_dir / "string_args.txt"
-        script_path = tmp_dir / "script.py"
-        self._write_args(input_path)
-        self._write_string_args(string_args_path)
-        self.write_python_script(
-            jinja_context=dict(
-                conn_params=self.get_snowflake_conn_params(),
-                log_level=self.log_level,
-                temp_data_dict=self.temp_data_dict,
-                dag_id=self.dag_id,
-                task_id=self.task_id,
-                run_id=self.run_id,
-                ts_nodash=self.ts_nodash,
-                op_args=self.op_args,
-                op_kwargs=op_kwargs,
-                expect_airflow=self.expect_airflow,
-                pickling_library=self.pickling_library.__name__,
-                python_callable=self.python_callable.__name__,
-                python_callable_source=self.get_python_source(),
-            ),
-            filename=os.fspath(script_path),
-            render_template_as_native_obj=False,
-        )
-
-        try:
-            execute_in_subprocess(
-                cmd=[
-                    os.fspath(python_path),
-                    os.fspath(script_path),
-                    os.fspath(input_path),
-                    os.fspath(output_path),
-                    os.fspath(string_args_path),
-                ]
+    def _execute_python_callable_in_subprocess(self, python_path: Path):
+        with TemporaryDirectory(prefix="venv-call") as tmp:
+            tmp_dir = Path(tmp)
+            op_kwargs: dict[str, Any] = {k: v for k, v in self.op_kwargs.items()}
+            if self.templates_dict:
+                op_kwargs["templates_dict"] = self.templates_dict
+            input_path = tmp_dir / "script.in"
+            output_path = tmp_dir / "script.out"
+            string_args_path = tmp_dir / "string_args.txt"
+            script_path = tmp_dir / "script.py"
+            self._write_args(input_path)
+            self._write_string_args(string_args_path)
+            self.write_python_script(
+                jinja_context=dict(
+                    conn_params=self.get_snowflake_conn_params(),
+                    log_level=self.log_level,
+                    temp_data_dict=self.temp_data_dict,
+                    dag_id=self.dag_id,
+                    task_id=self.task_id,
+                    run_id=self.run_id,
+                    ts_nodash=self.ts_nodash,
+                    op_args=self.op_args,
+                    op_kwargs=op_kwargs,
+                    expect_airflow=self.expect_airflow,
+                    pickling_library=self.pickling_library.__name__,
+                    python_callable=self.python_callable.__name__,
+                    python_callable_source=self.get_python_source(),
+                ),
+                filename=os.fspath(script_path),
+                render_template_as_native_obj=False,
             )
-        except subprocess.CalledProcessError as e:
-            if e.returncode in self.skip_on_exit_code:
-                raise AirflowSkipException(f"Process exited with code {e.returncode}. Skipping.")
-            else:
-                raise
 
-        return self._read_result(output_path)
+            try:
+                execute_in_subprocess(
+                    cmd=[
+                        os.fspath(python_path),
+                        os.fspath(script_path),
+                        os.fspath(input_path),
+                        os.fspath(output_path),
+                        os.fspath(string_args_path),
+                    ]
+                )
+            except subprocess.CalledProcessError as e:
+                if e.returncode in self.skip_on_exit_code:
+                    raise AirflowSkipException(f"Process exited with code {e.returncode}. Skipping.")
+                else:
+                    raise
+
+            return self._read_result(output_path)
 
 
 class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator):
