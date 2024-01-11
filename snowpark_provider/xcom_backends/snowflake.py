@@ -93,7 +93,7 @@ def _write_to_snowflake(
                         '{dag_id}' AS dag_id, 
                         '{task_id}' AS task_id, 
                         '{run_id}' AS run_id, 
-                        '{multi_index}' AS multi_index,
+                        {multi_index} AS multi_index,
                         '{key}' AS key,  
                         '{value_type}' AS value_type,
                         '{json_str}' AS value) tab2
@@ -192,7 +192,7 @@ def _read_from_snowflake(parsed_uri: str, hook:SnowflakeHook, snowflake_xcom_obj
                                             WHERE dag_id = '{xcom_cols[0]}'
                                             AND task_id = '{xcom_cols[1]}'
                                             AND run_id = '{xcom_cols[2]}'
-                                            AND multi_index = '{xcom_cols[3]}'
+                                            AND multi_index = {xcom_cols[3]}
                                             AND key = '{xcom_cols[4]}'
                                         ;""")[0]
             
@@ -201,7 +201,9 @@ def _read_from_snowflake(parsed_uri: str, hook:SnowflakeHook, snowflake_xcom_obj
             
             elif ret_value_type == 'dict':
                 class_type = json.loads(ret_value).get('class')
-                if class_type in ('SnowparkTable'):
+                if class_type is None:
+                    return json.loads(ret_value)
+                elif class_type in ('SnowparkTable'):
                     obj_type = globals().get(class_type, None)
                     if obj_type:
                         return obj_type.from_json((json.loads(ret_value)))
@@ -347,8 +349,6 @@ class SnowflakeXComBackend(BaseXCom):
         else:
             base_uri = f"snowflake://{conn_params['account']}?"
 
-        multi_index = 0
-
         #first serialize any SnowparkTable values to json with their serializers
         value = _serialize_table_values(value)
 
@@ -362,7 +362,7 @@ class SnowflakeXComBackend(BaseXCom):
             dag_id=dag_id, 
             task_id=task_id, 
             run_id=run_id, 
-            multi_index=multi_index
+            multi_index=map_index
         )
         return BaseXCom.serialize_value(value=uris, **kwargs)
         
