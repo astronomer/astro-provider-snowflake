@@ -5,6 +5,7 @@ from attr import define, field
 
 __version__ = "0.0.0"
 
+
 def get_provider_info():
     return {
         "package-name": "astro-provider-snowpark",
@@ -30,20 +31,22 @@ def get_provider_info():
         ],
     }
 
+
 @define
 class Metadata:
     schema: str | None = None
     database: str | None = None
 
+
 @define(slots=False)
 class SnowparkTable:
     """
-    This class allows the Snowpark operators and decorators to create instances of Snowpark Dataframes 
+    This class allows the Snowpark operators and decorators to create instances of Snowpark Dataframes
     for any arguments passed to the python callable.
 
-    It is a slim version of the Astro Python SDK Table class.  Therefore users can pass either astro.sql.table.Table or 
-    snowpark_provider.utils.SnowparkTable objects as arguments interchangeably. 
-    
+    It is a slim version of the Astro Python SDK Table class.  Therefore users can pass either astro.sql.table.Table or
+    snowpark_provider.utils.SnowparkTable objects as arguments interchangeably.
+
     """
 
     template_fields = ("name",)
@@ -84,18 +87,21 @@ class SnowparkTable:
             metadata=Metadata(**obj["metadata"]),
             conn_id=obj["conn_id"],
         )
-    
+
     def serialize(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "uri": self.uri,
             "extra": self.extra,
             "conn_id": self.conn_id,
-            "metadata": {"schema": self.metadata.schema, "database": self.metadata.database},
+            "metadata": {
+                "schema": self.metadata.schema,
+                "database": self.metadata.database,
+            },
         }
 
     @staticmethod
-    def deserialize(data: dict[str, Any], version:int):
+    def deserialize(data: dict[str, Any], version: int):
         return SnowparkTable(
             name=data["name"],
             uri=data["uri"],
