@@ -67,7 +67,6 @@ class SnowparkContainersHook(SnowflakeHook):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.conn_params = self._get_conn_params()
 
     def create_pool(
         self,
@@ -212,6 +211,8 @@ class SnowparkContainersHook(SnowflakeHook):
         :type replace_existing: bool
         """
 
+        self.conn_params = self._get_conn_params()
+
         database = (
             database if database else self.database or self.conn_params["database"]
         )
@@ -256,6 +257,8 @@ class SnowparkContainersHook(SnowflakeHook):
         :type limit: int
         """
 
+        self.conn_params = self._get_conn_params()
+
         database = (
             database if database else self.database or self.conn_params["database"]
         )
@@ -285,6 +288,8 @@ class SnowparkContainersHook(SnowflakeHook):
         Snowpark Containers list repo does not include account information currently.
 
         """
+
+        self.conn_params = self._get_conn_params()
 
         database = (
             database if database else self.database or self.conn_params["database"]
@@ -320,6 +325,8 @@ class SnowparkContainersHook(SnowflakeHook):
         :param schema: Optional: Schema in which to create the repository.
         :type schema: str
         """
+
+        self.conn_params = self._get_conn_params()
 
         database = (
             database if database else self.database or self.conn_params["database"]
@@ -368,6 +375,8 @@ class SnowparkContainersHook(SnowflakeHook):
         :param max_inst: The maximum number of nodes to scale to. Default: 1
         :type max_inst: int
         """
+
+        self.conn_params = self._get_conn_params()
 
         self.database = (
             database if database else self.database or self.conn_params["database"]
@@ -439,6 +448,8 @@ class SnowparkContainersHook(SnowflakeHook):
         :param schema: Optional: Schema of the running service.
         :type schema: str
         """
+        self.conn_params = self._get_conn_params()
+
         self.database = (
             database if database else self.database or self.conn_params["database"]
         )
@@ -467,6 +478,8 @@ class SnowparkContainersHook(SnowflakeHook):
         :type schema: str
         """
 
+        self.conn_params = self._get_conn_params()
+
         self.database = (
             database if database else self.database or self.conn_params["database"]
         )
@@ -494,6 +507,8 @@ class SnowparkContainersHook(SnowflakeHook):
         :param schema: Optional: Schema of the service.
         :type schema: str
         """
+
+        self.conn_params = self._get_conn_params()
 
         self.database = (
             database if database else self.database or self.conn_params["database"]
@@ -534,6 +549,8 @@ class SnowparkContainersHook(SnowflakeHook):
         :param quiet: Return a subset of data with current status only.
         :type quiet: bool
         """
+
+        self.conn_params = self._get_conn_params()
 
         self.database = (
             database if database else self.database or self.conn_params["database"]
@@ -608,6 +625,8 @@ class SnowparkContainersHook(SnowflakeHook):
         :type schema: str
         """
 
+        self.conn_params = self._get_conn_params()
+
         self.database = (
             database if database else self.database or self.conn_params["database"]
         )
@@ -670,6 +689,8 @@ class SnowparkContainersHook(SnowflakeHook):
             docker_pull,
             docker_push,
         )
+
+        self.conn_params = self._get_conn_params()
 
         database = (
             database if database else self.database or self.conn_params["database"]

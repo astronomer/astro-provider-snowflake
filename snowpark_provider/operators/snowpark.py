@@ -140,7 +140,6 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         self.schema = kwargs.pop("schema", None)
         self.authenticator = kwargs.pop("authenticator", None)
         self.session_parameters = kwargs.pop("session_parameters", None)
-        self.conn_params = self.get_snowflake_conn_params()
 
         self.skip_on_exit_code = (
             skip_on_exit_code
@@ -701,6 +700,7 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
         # some args are deserialized to objects depending on Airflow version.  Need to reserialize as json.
         self.op_args = _serialize_table_args(self.op_args)
         self.op_kwargs = _serialize_table_args(self.op_kwargs)
+        self.conn_params = self.get_snowflake_conn_params()
 
         payload = dict(
             python_callable_str=self.get_python_source(),
@@ -751,6 +751,7 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
 
         # pull oauth headers as close as possible before execution due to timeout limits
         if self.runner_service_name:
+            self.conn_params = self.get_snowflake_conn_params()
             hook = SnowparkContainersHook(
                 *self.conn_params,
                 session_parameters={"PYTHON_CONNECTOR_QUERY_RESULT_FORMAT": "json"},
