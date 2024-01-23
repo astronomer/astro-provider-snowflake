@@ -1,6 +1,6 @@
 FROM python:3.9-slim-bullseye
 
-COPY requirements.txt requirements-runner.txt /tmp
+COPY requirements.txt requirements-runner.txt /tmp/
 
 RUN apt-get update && \
     apt-get install -y build-essential && \
@@ -8,8 +8,8 @@ RUN apt-get update && \
     /usr/local/bin/python3.9 -m pip install --upgrade pip && \
     /usr/local/bin/python3.9 -m pip install -r /tmp/requirements-runner.txt && \
     /usr/local/bin/python3.9 -m pip install --cache-dir=/tmp/pip_cache -r /tmp/requirements.txt && \
-    /usr/local/bin/python3.8 -m pip install --upgrade pip && \
-    /usr/local/bin/python3.8 -m pip install --cache-dir=/tmp/pip_cache -r /tmp/requirements.txt
+    /usr/local/bin/python3.9 -m pip install --upgrade pip && \
+    /usr/local/bin/python3.9 -m pip install --cache-dir=/tmp/pip_cache -r /tmp/requirements.txt
 
 WORKDIR /app
 COPY src .
