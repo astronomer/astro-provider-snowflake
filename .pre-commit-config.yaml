@@ -1,10 +1,10 @@
+---
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
   - repo: meta
     hooks:
       - id: identity
-      - id: check-hooks-apply
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
@@ -17,12 +17,12 @@ repos:
       - id: trailing-whitespace
       - id: mixed-line-ending
       - id: pretty-format-json
-        args: [ '--autofix' ]
+        args: ['--autofix']
       - id: name-tests-test
-        args: [ '--pytest-test-first' ]
+        args: ['--pytest-test-first']
       - id: detect-private-key
       - id: detect-aws-credentials
-        args: [ "--allow-missing-credentials" ]
+        args: ["--allow-missing-credentials"]
 
   - repo: https://github.com/pre-commit/pygrep-hooks
     rev: v1.10.0
@@ -79,9 +79,11 @@ repos:
         args: ["--write-changes"]
 
   - repo: https://github.com/psf/black
-    rev: 23.1.0
+    rev: 23.10.1
     hooks:
       - id: black
+        args: ["--config", "pyproject.toml"]
+        types: [python]
 ci:
   autofix_commit_msg: 🎨 [pre-commit.ci] Auto format from pre-commit.com hooks
   autoupdate_commit_msg: ⬆ [pre-commit.ci] pre-commit autoupdate
