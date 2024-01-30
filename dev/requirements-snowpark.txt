@@ -1,4 +1,4 @@
 psycopg2-binary
-snowflake_snowpark_python[pandas]==1.5.1
-/tmp/astro_provider_snowflake-0.0.0-py3-none-any.whl
+snowflake-snowpark-python[pandas]==1.11.1
+/tmp/astro_provider_snowpark-0.0.0-py3-none-any.whl
 virtualenv

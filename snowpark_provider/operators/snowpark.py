@@ -22,21 +22,18 @@ from airflow.utils.context import Context, context_copy_partial
 from airflow.utils.process_utils import execute_in_subprocess
 from airflow.utils.decorators import remove_task_decorator
 from airflow.operators.python import (
-    _BasePythonVirtualenvOperator, 
-    PythonVirtualenvOperator, 
-    ExternalPythonOperator
+    _BasePythonVirtualenvOperator,
+    PythonVirtualenvOperator,
+    ExternalPythonOperator,
 )
-from airflow.exceptions import (
-    AirflowException,
-    AirflowSkipException
-)
+from airflow.exceptions import AirflowException, AirflowSkipException
 
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
 from snowpark_provider.hooks.snowpark import SnowparkContainersHook
 from snowpark_provider import SnowparkTable
 from snowpark_provider.utils.snowpark_helpers import (
     _deserialize_snowpark_tables,
-    _serialize_table_args
+    _serialize_table_args,
 )
 
 try:
@@ -44,10 +41,10 @@ try:
 except ImportError:
     SnowparkSession = None  # type: ignore
 
-class SnowparkOperatorExtraLink(BaseOperatorLink):
 
+class SnowparkOperatorExtraLink(BaseOperatorLink):
     name = "Astronomer Registry"
-    
+
     def get_link(self, operator: BaseOperator, *, ti_key=None):
         return "https://registry.astronomer.io/providers/astro-provider-snowflake/versions/latest"
 
@@ -71,17 +68,17 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.
     :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the database set at the operator or hook level.  If None, 
+        not set the operator will use the database set at the operator or hook level.  If None,
         the operator will assume a default database is set in the Snowflake user preferences.
     :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the schema set at the operator or hook level.  If None, 
+        not set the operator will use the schema set at the operator or hook level.  If None,
         the operator will assume a default schema is set in the Snowflake user preferences.
     :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
         must be set if temp_data_output == 'stage'.  Output location will be named for the task:
         <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
-        
+
         and a uri will be returned to Airflow xcom:
-        
+
         snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
 
     :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
@@ -91,7 +88,7 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
 
         and the return value set to a SnowparkTable object with the fully-qualified table name.
-        
+
         SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
 
     :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
@@ -113,7 +110,8 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         will raise warning if Airflow is not installed, and it will attempt to load Airflow
         macros when starting.
     """
-    ui_color = "#e1f5fc" #Light
+
+    ui_color = "#e1f5fc"  # Light
     # ui_color = "#29b5e8" #Medium
     # ui_color = "#29b5e8" #dark
 
@@ -127,22 +125,21 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         temp_data_db: str = None,
         temp_data_schema: str = None,
         temp_data_stage: str = None,
-        temp_data_table_prefix: str = 'XCOM_',
+        temp_data_table_prefix: str = "XCOM_",
         temp_data_overwrite: bool = False,
         show_return_value_in_logs: bool = False,
-        log_level: 'str' = 'ERROR',
+        log_level: "str" = "ERROR",
         skip_on_exit_code: int | Container[int] | None = None,
         **kwargs,
     ):
         self.snowflake_conn_id = snowflake_conn_id
         self.log_level = log_level
-        self.warehouse = kwargs.pop('warehouse', None)
-        self.database = kwargs.pop('database', None)
-        self.role = kwargs.pop('role', None)
-        self.schema = kwargs.pop('schema', None)
-        self.authenticator = kwargs.pop('authenticator', None)
-        self.session_parameters = kwargs.pop('session_parameters', None)
-        self.conn_params = self.get_snowflake_conn_params()
+        self.warehouse = kwargs.pop("warehouse", None)
+        self.database = kwargs.pop("database", None)
+        self.role = kwargs.pop("role", None)
+        self.schema = kwargs.pop("schema", None)
+        self.authenticator = kwargs.pop("authenticator", None)
+        self.session_parameters = kwargs.pop("session_parameters", None)
 
         self.skip_on_exit_code = (
             skip_on_exit_code
@@ -153,22 +150,24 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         )
 
         self.temp_data_dict = {
-            'temp_data_output': temp_data_output,
-            'temp_data_db': temp_data_db,
-            'temp_data_schema': temp_data_schema,
-            'temp_data_stage': temp_data_stage,
-            'temp_data_table_prefix': temp_data_table_prefix,
-            'temp_data_overwrite': temp_data_overwrite
+            "temp_data_output": temp_data_output,
+            "temp_data_db": temp_data_db,
+            "temp_data_schema": temp_data_schema,
+            "temp_data_stage": temp_data_stage,
+            "temp_data_table_prefix": temp_data_table_prefix,
+            "temp_data_overwrite": temp_data_overwrite,
         }
-    
-        if temp_data_output == 'stage':
-            assert temp_data_stage, "temp_data_stage must be specified if temp_data_output='stage'"
-        
+
+        if temp_data_output == "stage":
+            assert (
+                temp_data_stage
+            ), "temp_data_stage must be specified if temp_data_output='stage'"
+
         super().__init__(
             show_return_value_in_logs=show_return_value_in_logs,
             **kwargs,
         )
-    
+
     def get_snowflake_conn_params(self) -> dict:
         """
         Resolves snowflake connection parameters.
@@ -180,33 +179,40 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
 
         """
 
-        #Start with params that come with the Snowflake hook
-        conn_params = SnowflakeHook(snowflake_conn_id=self.snowflake_conn_id)._get_conn_params()
+        # Start with params that come with the Snowflake hook
+        conn_params = SnowflakeHook(
+            snowflake_conn_id=self.snowflake_conn_id
+        )._get_conn_params()
 
-        if conn_params['region'] in [None, '']:
-            parse_logic = len(conn_params['account'].split('.')) > 3 or len(conn_params['account'].split('-')) >= 2
-            assert parse_logic, "Snowflake Region not set and account name is not fully-qualified."
+        if conn_params["region"] in [None, ""]:
+            parse_logic = (
+                len(conn_params["account"].split(".")) > 3
+                or len(conn_params["account"].split("-")) >= 2
+            )
+            assert (
+                parse_logic
+            ), "Snowflake Region not set and account name is not fully-qualified."
 
-        #replace with any that come from the operator at runtime
+        # replace with any that come from the operator at runtime
         if self.warehouse:
-            conn_params['warehouse'] = self.warehouse
+            conn_params["warehouse"] = self.warehouse
         if self.database:
-            conn_params['database'] = self.database
+            conn_params["database"] = self.database
         if self.schema:
-            conn_params['schema'] = self.schema
+            conn_params["schema"] = self.schema
         if self.role:
-            conn_params['role'] = self.role
+            conn_params["role"] = self.role
         if self.authenticator:
-            conn_params['authenticator'] = self.authenticator
+            conn_params["authenticator"] = self.authenticator
         if self.session_parameters:
-            conn_params['session_parameters'] = self.session_parameters
+            conn_params["session_parameters"] = self.session_parameters
 
         return conn_params
-    
+
     def get_python_source(self):
         raw_source = inspect.getsource(self.python_callable)
         res = dedent(raw_source)
-        if hasattr(self, 'custom_operator_name'):
+        if hasattr(self, "custom_operator_name"):
             res = remove_task_decorator(res, self.custom_operator_name)
         return res
 
@@ -224,7 +230,7 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         :param render_template_as_native_obj: If ``True``, rendered Jinja template would be converted
             to a native Python object
         """
-        
+
         template_loader = jinja2.FileSystemLoader(searchpath=os.path.dirname(__file__))
         template_env: jinja2.Environment
         if render_template_as_native_obj:
@@ -232,10 +238,12 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
                 loader=template_loader, undefined=jinja2.StrictUndefined
             )
         else:
-            template_env = jinja2.Environment(loader=template_loader, undefined=jinja2.StrictUndefined)
+            template_env = jinja2.Environment(
+                loader=template_loader, undefined=jinja2.StrictUndefined
+            )
         template = template_env.get_template("snowpark_virtualenv_script.jinja2")
         template.stream(**jinja_context).dump(filename)
-    
+
     def _iter_serializable_context_keys(self):
         yield from super().BASE_SERIALIZABLE_CONTEXT_KEYS
         if self.system_site_packages or "apache-airflow" in self.requirements:
@@ -248,8 +256,8 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
         serializable_keys = set(self._iter_serializable_context_keys())
         serializable_context = context_copy_partial(context, serializable_keys)
 
-        self.run_id = context['run_id']
-        self.ts_nodash = context['ts_nodash']
+        self.run_id = context["run_id"]
+        self.ts_nodash = context["ts_nodash"]
 
         return super().execute(context=serializable_context)
 
@@ -297,7 +305,9 @@ class _BaseSnowparkOperator(_BasePythonVirtualenvOperator):
                 )
             except subprocess.CalledProcessError as e:
                 if e.returncode in self.skip_on_exit_code:
-                    raise AirflowSkipException(f"Process exited with code {e.returncode}. Skipping.")
+                    raise AirflowSkipException(
+                        f"Process exited with code {e.returncode}. Skipping."
+                    )
                 else:
                     raise
 
@@ -308,7 +318,7 @@ class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator
     """
     Runs a Snowflake Snowpark Python function in a virtualenv that is created and destroyed automatically.
 
-    Instantiates a Snowpark Session named 'snowpark_session' and attempts to create Snowpark Dataframes 
+    Instantiates a Snowpark Session named 'snowpark_session' and attempts to create Snowpark Dataframes
     from any SnowparTable type annotated arguments.
 
     The virtualenv must have this package installed in order pass table args.
@@ -344,17 +354,17 @@ class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.
     :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the database set at the operator or hook level.  If None, 
+        not set the operator will use the database set at the operator or hook level.  If None,
         the operator will assume a default database is set in the Snowflake user preferences.
     :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the schema set at the operator or hook level.  If None, 
+        not set the operator will use the schema set at the operator or hook level.  If None,
         the operator will assume a default schema is set in the Snowflake user preferences.
     :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
         must be set if temp_data_output == 'stage'.  Output location will be named for the task:
         <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
-        
+
         and a uri will be returned to Airflow xcom:
-        
+
         snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
 
     :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
@@ -364,7 +374,7 @@ class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator
         <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
 
         and the return value set to a SnowparkTable object with the fully-qualified table name.
-        
+
         SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
 
     :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
@@ -391,11 +401,16 @@ class SnowparkVirtualenvOperator(PythonVirtualenvOperator, _BaseSnowparkOperator
         will raise warning if Airflow is not installed, and it will attempt to load Airflow
         macros when starting.
     """
-    template_fields: Sequence[str] = tuple({"requirements"} | set(_BaseSnowparkOperator.template_fields))
+
+    template_fields: Sequence[str] = tuple(
+        {"requirements"} | set(_BaseSnowparkOperator.template_fields)
+    )
     template_ext: Sequence[str] = (".txt",)
 
-    def __init__(self, **kwargs,):        
-
+    def __init__(
+        self,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
 
 
@@ -403,9 +418,9 @@ class SnowparkExternalPythonOperator(ExternalPythonOperator, _BaseSnowparkOperat
     """
     Runs a Snowflake Snowpark Python function with a preexisting python environment.
 
-    Instantiates a Snowpark Session named 'snowpark_session' and attempts to create Snowpark Dataframes 
+    Instantiates a Snowpark Session named 'snowpark_session' and attempts to create Snowpark Dataframes
     from any SnowparTable type annotated arguments.
-    
+
     The virtualenv must have this package installed in order pass table args.
 
     If an existing virtualenv is not available consider using the SnowparkVirtualenvPythonOperator.
@@ -441,17 +456,17 @@ class SnowparkExternalPythonOperator(ExternalPythonOperator, _BaseSnowparkOperat
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.
     :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the database set at the operator or hook level.  If None, 
+        not set the operator will use the database set at the operator or hook level.  If None,
         the operator will assume a default database is set in the Snowflake user preferences.
     :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the schema set at the operator or hook level.  If None, 
+        not set the operator will use the schema set at the operator or hook level.  If None,
         the operator will assume a default schema is set in the Snowflake user preferences.
     :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
         must be set if temp_data_output == 'stage'.  Output location will be named for the task:
         <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
-        
+
         and a uri will be returned to Airflow xcom:
-        
+
         snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
 
     :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
@@ -461,7 +476,7 @@ class SnowparkExternalPythonOperator(ExternalPythonOperator, _BaseSnowparkOperat
         <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
 
         and the return value set to a SnowparkTable object with the fully-qualified table name.
-        
+
         SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
 
     :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
@@ -483,11 +498,10 @@ class SnowparkExternalPythonOperator(ExternalPythonOperator, _BaseSnowparkOperat
         will raise warning if Airflow is not installed, and it will attempt to load Airflow
         macros when starting.
     """
+
     template_fields: Sequence[str] = tuple(set(_BaseSnowparkOperator.template_fields))
-    # template_ext: Sequence[str] = (".txt",)
 
     def __init__(self, **kwargs):
-        
         super().__init__(**kwargs)
 
 
@@ -495,9 +509,9 @@ class SnowparkPythonOperator(SnowparkExternalPythonOperator):
     """
     Runs a Snowflake Snowpark Python function in a local Airflow task.
 
-    This operator assumes that Snowpark libraries are installed on the Apache Airflow instance and, 
-    by definition, that the Airflow instance is running a version of python which is supported with 
-    Snowpark.  If not consider using a virtualenv and the SnowparkVirtualenvOperator or 
+    This operator assumes that Snowpark libraries are installed on the Apache Airflow instance and,
+    by definition, that the Airflow instance is running a version of python which is supported with
+    Snowpark.  If not consider using a virtualenv and the SnowparkVirtualenvOperator or
     SnowparkExternalPythonOperator instead.
 
     :param snowflake_conn_id: Reference to
@@ -507,17 +521,17 @@ class SnowparkPythonOperator(SnowparkExternalPythonOperator):
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.
     :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the database set at the operator or hook level.  If None, 
+        not set the operator will use the database set at the operator or hook level.  If None,
         the operator will assume a default database is set in the Snowflake user preferences.
     :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the schema set at the operator or hook level.  If None, 
+        not set the operator will use the schema set at the operator or hook level.  If None,
         the operator will assume a default schema is set in the Snowflake user preferences.
     :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
         must be set if temp_data_output == 'stage'.  Output location will be named for the task:
         <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
-        
+
         and a uri will be returned to Airflow xcom:
-        
+
         snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
 
     :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
@@ -527,7 +541,7 @@ class SnowparkPythonOperator(SnowparkExternalPythonOperator):
         <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
 
         and the return value set to a SnowparkTable object with the fully-qualified table name.
-        
+
         SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
 
     :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
@@ -551,27 +565,25 @@ class SnowparkPythonOperator(SnowparkExternalPythonOperator):
         unrolled to multiple XCom values. Dict will unroll to xcom values with keys as keys.
         Defaults to False.
     """
-    
+
     def __init__(
         self,
         *,
         python: str = sys.executable,
         **kwargs,
     ) -> None:
-
-        #Older python versions may have snowpark in a virtualenv, for this operator it must be in base python
+        # Older python versions may have snowpark in a virtualenv, for this operator it must be in base python
         if SnowparkSession is None:
-            raise AirflowException("The snowflake-snowpark-python package is not installed.")
+            raise AirflowException(
+                "The snowflake-snowpark-python package is not installed."
+            )
 
-        super().__init__(
-            python=python,
-            **kwargs
-        )
+        super().__init__(python=python, **kwargs)
 
 
 class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
     """
-    Runs a function in a Snowpark Container runner service.  
+    Runs a function in a Snowpark Container runner service.
 
     The function must be defined using def, and not be
     part of a class. All imports must happen inside the function
@@ -579,21 +591,21 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
     variable named virtualenv_string_args will be available (populated by
     string_args). In addition, one can pass stuff through op_args and op_kwargs, and one
     can use a return value.
-        
+
     :param snowflake_conn_id: connection to use when running code within the Snowpark Container runner service.
     :type snowflake_conn_id: str  (default is snowflake_default)
-    :param runner_service_name: Name of Airflow runner service in Snowpark Container services.  Must specify 
+    :param runner_service_name: Name of Airflow runner service in Snowpark Container services.  Must specify
     runner_service_name or runner_endpoint
     :type runner_service_name: str
-    :param runner_endpoint: Endpoint URL of the instantiated Snowpark Container runner.  Must specify runner_endpoint or 
+    :param runner_endpoint: Endpoint URL of the instantiated Snowpark Container runner.  Must specify runner_endpoint or
     runner_service_name.
     :type runner_endpoint: str
-    :param runner_headers: Optional OAUTH bearer token for Snowpark Container runner.  If runner_service_name is 
+    :param runner_headers: Optional OAUTH bearer token for Snowpark Container runner.  If runner_service_name is
     specified SnowparkContainersHook() will be used to pull the token just before running the task.
     :type runner_headers: str
     :param python_callable: Function to decorate
-    :type python_callable: Callable 
-    :param python_version: Python version (ie. '<maj>.<min>').  Callable will run in a PythonVirtualenvOperator on the runner.  
+    :type python_callable: Callable
+    :param python_version: Python version (ie. '<maj>.<min>').  Callable will run in a PythonVirtualenvOperator on the runner.
         If not set will use default python version on runner.
     :type python_version: str:
     :param requirements: Optional list of python dependencies or a path to a requirements.txt file to be installed for the callable.
@@ -602,17 +614,17 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.
     :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the database set at the operator or hook level.  If None, 
+        not set the operator will use the database set at the operator or hook level.  If None,
         the operator will assume a default database is set in the Snowflake user preferences.
     :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the schema set at the operator or hook level.  If None, 
+        not set the operator will use the schema set at the operator or hook level.  If None,
         the operator will assume a default schema is set in the Snowflake user preferences.
     :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
         must be set if temp_data_output == 'stage'.  Output location will be named for the task:
         <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
-        
+
         and a uri will be returned to Airflow xcom:
-        
+
         snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
 
     :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
@@ -622,7 +634,7 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
         <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
 
         and the return value set to a SnowparkTable object with the fully-qualified table name.
-        
+
         SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
 
     :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
@@ -648,12 +660,12 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
     :type expect_airflow: bool
     """
 
-    #template_fields: Sequence[str] = tuple({"python"} | set(PythonOperator.template_fields))
+    # template_fields: Sequence[str] = tuple({"python"} | set(PythonOperator.template_fields))
 
     def __init__(
         self,
         *,
-        runner_service_name:str = None,
+        runner_service_name: str = None,
         runner_endpoint: str = None,
         runner_headers: dict = None,
         python_version: str | None = None,
@@ -661,51 +673,54 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
         pip_install_options: list[str] = [],
         **kwargs,
     ):
-
         if isinstance(requirements, str):
-            try: 
-                with open(requirements, 'r') as requirements_file:
+            try:
+                with open(requirements, "r") as requirements_file:
                     self.requirements = requirements_file.read().splitlines()
             except:
-                raise FileNotFoundError(f'Specified requirements file {requirements} does not exist or is not readable.')
+                raise FileNotFoundError(
+                    f"Specified requirements file {requirements} does not exist or is not readable."
+                )
         else:
-            assert isinstance(requirements, list), "requirements must be a list or filename."
+            assert isinstance(
+                requirements, list
+            ), "requirements must be a list or filename."
             self.requirements = requirements
 
-        self.runner_endpoint=runner_endpoint
-        self.runner_headers=runner_headers
-        self.runner_service_name=runner_service_name
+        self.runner_endpoint = runner_endpoint
+        self.runner_headers = runner_headers
+        self.runner_service_name = runner_service_name
         self.pip_install_options = pip_install_options
         self.python_version = python_version
         self.system_site_packages = True
-        
+
         super().__init__(**kwargs)
 
     def _build_payload(self, context):
-
-        #some args are deserialized to objects depending on Airflow version.  Need to reserialize as json.
+        # some args are deserialized to objects depending on Airflow version.  Need to reserialize as json.
         self.op_args = _serialize_table_args(self.op_args)
         self.op_kwargs = _serialize_table_args(self.op_kwargs)
+        self.conn_params = self.get_snowflake_conn_params()
 
         payload = dict(
-            python_callable_str = self.get_python_source(), 
-            python_callable_name = self.python_callable.__name__,
-            log_level = self.log_level,
-            requirements = self.requirements,
-            pip_install_options = self.pip_install_options,
-            snowflake_user_conn_params = self.conn_params,
-            temp_data_dict = self.temp_data_dict,
-            system_site_packages = self.system_site_packages,
-            python_version = self.python_version,
-            dag_id = self.dag_id,
-            task_id = self.task_id,
-            run_id = context['run_id'],
-            ts_nodash = context['ts_nodash'],
-            op_args = self.op_args,
-            op_kwargs = self.op_kwargs,
-            string_args = self.string_args,
+            python_callable_str=self.get_python_source(),
+            python_callable_name=self.python_callable.__name__,
+            log_level=self.log_level,
+            requirements=self.requirements,
+            pip_install_options=self.pip_install_options,
+            snowflake_user_conn_params=self.conn_params,
+            temp_data_dict=self.temp_data_dict,
+            system_site_packages=self.system_site_packages,
+            python_version=self.python_version,
+            dag_id=self.dag_id,
+            task_id=self.task_id,
+            run_id=context["run_id"],
+            ts_nodash=context["ts_nodash"],
+            op_args=self.op_args,
+            op_kwargs=self.op_kwargs,
+            string_args=self.string_args,
         )
-        
+
         return payload
 
     def _iter_serializable_context_keys(self):
@@ -725,58 +740,85 @@ class SnowparkContainersPythonOperator(_BaseSnowparkOperator):
         return super().execute(context=serializable_context)
 
     def execute_callable(self):
-
         responses = asyncio.run(self._execute_python_callable_in_snowpark_container())
 
         return responses
-        
+
     async def _execute_python_callable_in_snowpark_container(self):
+        assert (
+            self.runner_service_name or self.runner_endpoint
+        ), "Must specify 'runner_service_name' or 'runner_endpoint'"
 
-        assert self.runner_service_name or self.runner_endpoint, "Must specify 'runner_service_name' or 'runner_endpoint'"
-
-        #pull oauth headers as close as possible before execution due to timeout limits
+        # pull oauth headers as close as possible before execution due to timeout limits
         if self.runner_service_name:
-            hook=SnowparkContainersHook(*self.conn_params, session_parameters={'PYTHON_CONNECTOR_QUERY_RESULT_FORMAT': 'json'})
-            urls, self.runner_headers = hook.get_service_urls(service_name=self.runner_service_name)
-            self.runner_endpoint = urls['airflow-task-runner']+'/task'
+            self.conn_params = self.get_snowflake_conn_params()
+            hook = SnowparkContainersHook(
+                *self.conn_params,
+                session_parameters={"PYTHON_CONNECTOR_QUERY_RESULT_FORMAT": "json"},
+            )
+            urls, self.runner_headers = hook.get_service_urls(
+                service_name=self.runner_service_name
+            )
+            self.runner_endpoint = urls["airflow-task-runner"] + "/task"
 
-        print(f"""
+        print(
+            f"""
         __________________________________
         Running function {self.payload['python_callable_name']} in Snowpark Containers 
         Task: {self.task_id}
         Airflow Task Runner: {self.runner_endpoint}
         __________________________________
-        """)
+        """
+        )
 
-        snowparktable_classname = SnowparkTable.__module__+'.'+SnowparkTable.__qualname__
-        allowed_deserialization_classes = conf.get("core", "allowed_deserialization_classes").split()
+        snowparktable_classname = (
+            SnowparkTable.__module__ + "." + SnowparkTable.__qualname__
+        )
+        allowed_deserialization_classes = conf.get(
+            "core", "allowed_deserialization_classes"
+        ).split()
 
-        if any([re.compile(re.sub(r"(\w)\.", r"\1\..", p)).match(snowparktable_classname) for p in allowed_deserialization_classes]):
+        if any(
+            [
+                re.compile(re.sub(r"(\w)\.", r"\1\..", p)).match(
+                    snowparktable_classname
+                )
+                for p in allowed_deserialization_classes
+            ]
+        ):
             deserialize_args = True
         else:
             deserialize_args = False
-       
+
         async with aiohttp.ClientSession() as session:
-            async with session.ws_connect(self.runner_endpoint, headers=self.runner_headers) as ws:
+            async with session.ws_connect(
+                self.runner_endpoint, headers=self.runner_headers
+            ) as ws:
                 await ws.send_json(self.payload)
 
                 async for msg in ws:
                     if msg.type == aiohttp.WSMsgType.TEXT:
                         response = json.loads(msg.data)
 
-                        if response['type'] in ["log", "execution_log", "infra"]:
-                            [self.log.info(line) for line in response['output'].splitlines()]
-                        
-                        if response['type'] == "error":
-                            [self.log.error(line) for line in response['output'].splitlines()]
+                        if response["type"] in ["log", "execution_log", "infra"]:
+                            [
+                                self.log.info(line)
+                                for line in response["output"].splitlines()
+                            ]
+
+                        if response["type"] == "error":
+                            [
+                                self.log.error(line)
+                                for line in response["output"].splitlines()
+                            ]
                             raise AirflowException("Error occurred in Task run.")
 
-                        if  response['type'] == 'results':
-                            return_value = json.loads(response['output'])
+                        if response["type"] == "results":
+                            return_value = json.loads(response["output"])
                             if deserialize_args:
                                 return _deserialize_snowpark_tables(return_value)
                             else:
                                 return return_value
-                                      
+
                     elif msg.type == aiohttp.WSMsgType.ERROR:
                         break

@@ -4,15 +4,20 @@ from typing import Callable, Sequence
 import inspect
 from textwrap import dedent
 
-from airflow.decorators.base import DecoratedOperator, TaskDecorator, task_decorator_factory
+from airflow.decorators.base import (
+    DecoratedOperator,
+    TaskDecorator,
+    task_decorator_factory,
+)
 from airflow.utils.decorators import remove_task_decorator
 
 from snowpark_provider.operators.snowpark import (
-    SnowparkVirtualenvOperator, 
+    SnowparkVirtualenvOperator,
     SnowparkExternalPythonOperator,
     SnowparkPythonOperator,
-    SnowparkContainersPythonOperator
+    SnowparkContainersPythonOperator,
 )
+
 
 class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator):
     """
@@ -24,17 +29,17 @@ class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.
     :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the database set at the operator or hook level.  If None, 
+        not set the operator will use the database set at the operator or hook level.  If None,
         the operator will assume a default database is set in the Snowflake user preferences.
     :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the schema set at the operator or hook level.  If None, 
+        not set the operator will use the schema set at the operator or hook level.  If None,
         the operator will assume a default schema is set in the Snowflake user preferences.
     :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
         must be set if temp_data_output == 'stage'.  Output location will be named for the task:
         <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
-        
+
         and a uri will be returned to Airflow xcom:
-        
+
         snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
 
     :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
@@ -44,7 +49,7 @@ class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator
         <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
 
         and the return value set to a SnowparkTable object with the fully-qualified table name.
-        
+
         SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
 
     :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
@@ -66,20 +71,24 @@ class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator
     """
 
     template_fields: Sequence[str] = ("templates_dict", "op_args", "op_kwargs")
-    template_fields_renderers = {"templates_dict": "json", "op_args": "py", "op_kwargs": "py"}
+    template_fields_renderers = {
+        "templates_dict": "json",
+        "op_args": "py",
+        "op_kwargs": "py",
+    }
 
     custom_operator_name: str = "@task.snowpark_python"
 
-    def __init__(self, 
-                 *, 
-                 snowflake_conn_id: str | None = None,
-                 conn_id: str | None = None,
-                 python_callable, 
-                 op_args, 
-                 op_kwargs, 
-                 **kwargs
-            ) -> None:
-        
+    def __init__(
+        self,
+        *,
+        snowflake_conn_id: str | None = None,
+        conn_id: str | None = None,
+        python_callable,
+        op_args,
+        op_kwargs,
+        **kwargs,
+    ) -> None:
         self.doc_md = python_callable.__doc__
 
         kwargs_to_upstream = {
@@ -89,7 +98,7 @@ class _SnowparkPythonDecoratedOperator(DecoratedOperator, SnowparkPythonOperator
         }
         super().__init__(
             kwargs_to_upstream=kwargs_to_upstream,
-            snowflake_conn_id= snowflake_conn_id or conn_id or 'snowflake_default',
+            snowflake_conn_id=snowflake_conn_id or conn_id or "snowflake_default",
             python_callable=python_callable,
             op_args=op_args,
             op_kwargs=op_kwargs,
@@ -107,9 +116,9 @@ def snowpark_python_task(
 
     Accepts kwargs for operator kwarg. Can be reused in a single DAG.
 
-    This decorator assumes that Snowpark libraries are installed on the Apache Airflow instance and, 
-    by definition, that the Airflow instance is running a version of python which is supported with 
-    Snowpark.  If not consider using a virtualenv and the snowpark_virtualenv_task or 
+    This decorator assumes that Snowpark libraries are installed on the Apache Airflow instance and,
+    by definition, that the Airflow instance is running a version of python which is supported with
+    Snowpark.  If not consider using a virtualenv and the snowpark_virtualenv_task or
     snowpark_ext_python_task decorator instead.
 
     :param python_callable: Function to decorate
@@ -134,17 +143,17 @@ def snowpark_python_task(
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.
     :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the database set at the operator or hook level.  If None, 
+        not set the operator will use the database set at the operator or hook level.  If None,
         the operator will assume a default database is set in the Snowflake user preferences.
     :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the schema set at the operator or hook level.  If None, 
+        not set the operator will use the schema set at the operator or hook level.  If None,
         the operator will assume a default schema is set in the Snowflake user preferences.
     :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
         must be set if temp_data_output == 'stage'.  Output location will be named for the task:
         <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
-        
+
         and a uri will be returned to Airflow xcom:
-        
+
         snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
 
     :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
@@ -154,7 +163,7 @@ def snowpark_python_task(
         <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
 
         and the return value set to a SnowparkTable object with the fully-qualified table name.
-        
+
         SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
 
     :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
@@ -168,7 +177,9 @@ def snowpark_python_task(
     )
 
 
-class _SnowparkVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirtualenvOperator):
+class _SnowparkVirtualenvDecoratedOperator(
+    DecoratedOperator, SnowparkVirtualenvOperator
+):
     """
     Wraps a Python callable and captures args/kwargs when called for execution.
     :param python_callable: A reference to an object that is callable
@@ -176,7 +187,7 @@ class _SnowparkVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirtualenv
     :param requirements: Either a list of requirement strings, or a (templated)
         "requirements file" as specified by pip.
     :param python_version: The Python version to run the virtualenv with. Note that
-        both 2 and 2.7 are acceptable forms.
+        both 3 and 3.9 are acceptable forms.
     :param system_site_packages: Whether to include
         system_site_packages in your virtualenv.
         See virtualenv documentation for more information.
@@ -200,17 +211,17 @@ class _SnowparkVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirtualenv
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.
     :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the database set at the operator or hook level.  If None, 
+        not set the operator will use the database set at the operator or hook level.  If None,
         the operator will assume a default database is set in the Snowflake user preferences.
     :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the schema set at the operator or hook level.  If None, 
+        not set the operator will use the schema set at the operator or hook level.  If None,
         the operator will assume a default schema is set in the Snowflake user preferences.
     :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
         must be set if temp_data_output == 'stage'.  Output location will be named for the task:
         <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
-        
+
         and a uri will be returned to Airflow xcom:
-        
+
         snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
 
     :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
@@ -220,7 +231,7 @@ class _SnowparkVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirtualenv
         <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
 
         and the return value set to a SnowparkTable object with the fully-qualified table name.
-        
+
         SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
 
     :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
@@ -230,16 +241,16 @@ class _SnowparkVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirtualenv
 
     custom_operator_name: str = "@task.snowpark_virtualenv"
 
-    def __init__(self, 
-                 *, 
-                 snowflake_conn_id: str | None = None,
-                 conn_id: str | None = None,
-                 python_callable, 
-                 op_args, 
-                 op_kwargs, 
-                 **kwargs
-            ) -> None:
-
+    def __init__(
+        self,
+        *,
+        snowflake_conn_id: str | None = None,
+        conn_id: str | None = None,
+        python_callable,
+        op_args,
+        op_kwargs,
+        **kwargs,
+    ) -> None:
         self.doc_md = python_callable.__doc__
 
         kwargs_to_upstream = {
@@ -249,7 +260,7 @@ class _SnowparkVirtualenvDecoratedOperator(DecoratedOperator, SnowparkVirtualenv
         }
         super().__init__(
             kwargs_to_upstream=kwargs_to_upstream,
-            snowflake_conn_id= snowflake_conn_id or conn_id or 'snowflake_default',
+            snowflake_conn_id=snowflake_conn_id or conn_id or "snowflake_default",
             python_callable=python_callable,
             op_args=op_args,
             op_kwargs=op_kwargs,
@@ -271,7 +282,7 @@ def snowpark_virtualenv_task(
     :param requirements: Either a list of requirement strings, or a (templated)
         "requirements file" as specified by pip.
     :param python_version: The Python version to run the virtualenv with. Note that
-        both 2 and 2.7 are acceptable forms.
+        both 3 and 3.9 are acceptable forms.
     :param system_site_packages: Whether to include
         system_site_packages in your virtualenv.
         See virtualenv documentation for more information.
@@ -299,17 +310,17 @@ def snowpark_virtualenv_task(
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.
     :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the database set at the operator or hook level.  If None, 
+        not set the operator will use the database set at the operator or hook level.  If None,
         the operator will assume a default database is set in the Snowflake user preferences.
     :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the schema set at the operator or hook level.  If None, 
+        not set the operator will use the schema set at the operator or hook level.  If None,
         the operator will assume a default schema is set in the Snowflake user preferences.
     :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
         must be set if temp_data_output == 'stage'.  Output location will be named for the task:
         <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
-        
+
         and a uri will be returned to Airflow xcom:
-        
+
         snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
 
     :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
@@ -319,7 +330,7 @@ def snowpark_virtualenv_task(
         <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
 
         and the return value set to a SnowparkTable object with the fully-qualified table name.
-        
+
         SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
 
     :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
@@ -332,7 +343,10 @@ def snowpark_virtualenv_task(
         **kwargs,
     )
 
-class _SnowparkExternalPythonDecoratedOperator(DecoratedOperator, SnowparkExternalPythonOperator):
+
+class _SnowparkExternalPythonDecoratedOperator(
+    DecoratedOperator, SnowparkExternalPythonOperator
+):
     """
     Wraps a Python callable and captures args/kwargs when called for execution.
 
@@ -359,17 +373,17 @@ class _SnowparkExternalPythonDecoratedOperator(DecoratedOperator, SnowparkExtern
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.
     :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the database set at the operator or hook level.  If None, 
+        not set the operator will use the database set at the operator or hook level.  If None,
         the operator will assume a default database is set in the Snowflake user preferences.
     :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the schema set at the operator or hook level.  If None, 
+        not set the operator will use the schema set at the operator or hook level.  If None,
         the operator will assume a default schema is set in the Snowflake user preferences.
     :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
         must be set if temp_data_output == 'stage'.  Output location will be named for the task:
         <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
-        
+
         and a uri will be returned to Airflow xcom:
-        
+
         snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
 
     :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
@@ -379,7 +393,7 @@ class _SnowparkExternalPythonDecoratedOperator(DecoratedOperator, SnowparkExtern
         <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
 
         and the return value set to a SnowparkTable object with the fully-qualified table name.
-        
+
         SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
 
     :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
@@ -387,16 +401,16 @@ class _SnowparkExternalPythonDecoratedOperator(DecoratedOperator, SnowparkExtern
 
     custom_operator_name: str = "@task.snowpark_ext_python"
 
-    def __init__(self, 
-                 *, 
-                 snowflake_conn_id: str | None = None,
-                 conn_id: str | None = None,
-                 python_callable, 
-                 op_args, 
-                 op_kwargs, 
-                 **kwargs
-            ) -> None:
-        
+    def __init__(
+        self,
+        *,
+        snowflake_conn_id: str | None = None,
+        conn_id: str | None = None,
+        python_callable,
+        op_args,
+        op_kwargs,
+        **kwargs,
+    ) -> None:
         self.doc_md = python_callable.__doc__
 
         kwargs_to_upstream = {
@@ -406,7 +420,7 @@ class _SnowparkExternalPythonDecoratedOperator(DecoratedOperator, SnowparkExtern
         }
         super().__init__(
             kwargs_to_upstream=kwargs_to_upstream,
-            snowflake_conn_id= snowflake_conn_id or conn_id or 'snowflake_default',
+            snowflake_conn_id=snowflake_conn_id or conn_id or "snowflake_default",
             python_callable=python_callable,
             op_args=op_args,
             op_kwargs=op_kwargs,
@@ -451,17 +465,17 @@ def snowpark_ext_python_task(
         from the operator will be serialized to the stage specified by 'temp_data_stage' or
         a table with prefix 'temp_data_table_prefix'.
     :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the database set at the operator or hook level.  If None, 
+        not set the operator will use the database set at the operator or hook level.  If None,
         the operator will assume a default database is set in the Snowflake user preferences.
     :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the schema set at the operator or hook level.  If None, 
+        not set the operator will use the schema set at the operator or hook level.  If None,
         the operator will assume a default schema is set in the Snowflake user preferences.
     :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
         must be set if temp_data_output == 'stage'.  Output location will be named for the task:
         <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
-        
+
         and a uri will be returned to Airflow xcom:
-        
+
         snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
 
     :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
@@ -471,7 +485,7 @@ def snowpark_ext_python_task(
         <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
 
         and the return value set to a SnowparkTable object with the fully-qualified table name.
-        
+
         SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
 
     :param temp_data_overwrite: boolean.  Whether to overwrite existing temp data or error.
@@ -486,7 +500,9 @@ def snowpark_ext_python_task(
     )
 
 
-class SnowparkContainersPythonDecoratedOperator(DecoratedOperator, SnowparkContainersPythonOperator):
+class SnowparkContainersPythonDecoratedOperator(
+    DecoratedOperator, SnowparkContainersPythonOperator
+):
     """
     Wraps a Python callable and captures args/kwargs when called for execution.
 
@@ -499,15 +515,9 @@ class SnowparkContainersPythonDecoratedOperator(DecoratedOperator, SnowparkConta
 
     custom_operator_name: str = "@task.snowpark_containers_python"
 
-    def __init__(self, 
-                 *, 
-                 python_callable, 
-                 op_args, 
-                 op_kwargs, 
-                 **kwargs) -> None:
-        
+    def __init__(self, *, python_callable, op_args, op_kwargs, **kwargs) -> None:
         self.doc_md = python_callable.__doc__
-        
+
         kwargs_to_upstream = {
             "python_callable": python_callable,
             "op_args": op_args,
@@ -539,21 +549,21 @@ def snowpark_containers_python_task(
     This function is only used during type checking or auto-completion.
 
     :meta private:
-    
+
     :param snowflake_conn_id: connection to use when running code within the Snowpark Container runner service.
     :type snowflake_conn_id: str  (default is snowflake_default)
-    :param runner_service_name: Name of Airflow runner service in Snowpark Container services.  Must specify 
+    :param runner_service_name: Name of Airflow runner service in Snowpark Container services.  Must specify
     runner_service_name or runner_endpoint
     :type runner_service_name: str
-    :param runner_endpoint: Endpoint URL of the instantiated Snowpark Container runner.  Must specify 
+    :param runner_endpoint: Endpoint URL of the instantiated Snowpark Container runner.  Must specify
     runner_endpoint or runner_service_name.
     :type runner_endpoint: str
-    :param runner_headers: Optional OAUTH bearer token for Snowpark Container runner.  If runner_service_name is 
+    :param runner_headers: Optional OAUTH bearer token for Snowpark Container runner.  If runner_service_name is
     specified SnowparkContainersHook() will be used to pull the token just before running the task.
     :type runner_headers: str
     :param python_callable: Function to decorate
-    :type python_callable: Callable 
-    :param python_version: Python version (ie. '<maj>.<min>').  Callable will run in a PythonVirtualenvOperator on the runner.  
+    :type python_callable: Callable
+    :param python_version: Python version (ie. '<maj>.<min>').  Callable will run in a PythonVirtualenvOperator on the runner.
         If not set will use default python version on runner.
     :type python_version: str:
     :param log_level: Set log level for Snowflake logging.  Default: 'ERROR'
@@ -563,19 +573,19 @@ def snowpark_containers_python_task(
         a table with prefix 'temp_data_table_prefix'.
     :type temp_data_output: str
     :param temp_data_db: The database to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the database set at the operator or hook level.  If None, 
+        not set the operator will use the database set at the operator or hook level.  If None,
         the operator will assume a default database is set in the Snowflake user preferences.
     :type temp_data_db: str
     :param temp_data_schema: The schema to be used in serializing temporary Snowpark DataFrames. If
-        not set the operator will use the schema set at the operator or hook level.  If None, 
+        not set the operator will use the schema set at the operator or hook level.  If None,
         the operator will assume a default schema is set in the Snowflake user preferences.
     :type temp_data_schema: str
     :param temp_data_stage: The stage to be used in serializing temporary Snowpark DataFrames. This
         must be set if temp_data_output == 'stage'.  Output location will be named for the task:
         <DATABASE>.<SCHEMA>.<STAGE>/<DAG_ID>/<TASK_ID>/<RUN_ID>
-        
+
         and a uri will be returned to Airflow xcom:
-        
+
         snowflake://<ACCOUNT>.<REGION>?&stage=<FQ_STAGE>&key=<DAG_ID>/<TASK_ID>/<RUN_ID>/0/return_value.parquet'
     :type temp_data_stage: str
     :param temp_data_table_prefix: The prefix name to use for serialized Snowpark DataFrames. This
@@ -585,7 +595,7 @@ def snowpark_containers_python_task(
         <DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX
 
         and the return value set to a SnowparkTable object with the fully-qualified table name.
-        
+
         SnowparkTable(name=<DATABASE>.<SCHEMA>.<PREFIX><DAG_ID>__<TASK_ID>__<TS_NODASH>_INDEX)
     :type temp_data_table_prefix: str
     :param temp_data_overwrite: Whether to overwrite existing temp data or error.
