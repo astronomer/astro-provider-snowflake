@@ -24,6 +24,12 @@ snowflake-snowpark-python[pandas]==1.11.1
 git+https://github.com/astronomer/astro-provider-snowflake.git
 ```
 
+You will also need to add `git` to your `packages.txt` file to be able to install directly from a GH repository.
+
+```text
+git
+```
+
 ### OSS Airflow
 
 Make sure you are running [Airflow 2.8.0+](https://airflow.apache.org/docs/apache-airflow/stable/index.html).
