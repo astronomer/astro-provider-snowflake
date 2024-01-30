@@ -124,7 +124,7 @@ For the stage, create an internal Snowflake Stage, see [Choosing an Internal Sta
 Once the table and stage are created, you can enable the Snowflake XCom backend by setting the following environment variables in your Airflow environment. Make sure to reference the table and stage you created above and your Snowflake connection name.
 
 ```text
-AIRFLOW__CORE__XCOM_BACKEND='snowpark_provider.xcom_backends.snowflake.SnowflakeXComBackend'
+AIRFLOW__CORE__XCOM_BACKEND=snowpark_provider.xcom_backends.snowflake.SnowflakeXComBackend
 AIRFLOW__CORE__XCOM_SNOWFLAKE_TABLE='AIRFLOW_XCOM_DB.AIRFLOW_XCOM_SCHEMA.XCOM_TABLE'
 AIRFLOW__CORE__XCOM_SNOWFLAKE_STAGE='AIRFLOW_XCOM_DB.AIRFLOW_XCOM_SCHEMA.XCOM_STAGE'
 AIRFLOW__CORE__XCOM_SNOWFLAKE_CONN_NAME='snowflake_default'
