@@ -1,3 +1,11 @@
+## ⚠️ Discontinuation of project
+> This repository is no longer actively maintained, and the code is kept here for historical purposes only.
+> You are free to fork and use it under the terms of its license, but please note it may not work with the latest
+> dependencies or platforms, and it could contain security vulnerabilities. There are no guarantees or warranties for its use.
+> For production use, consider the official Apache Airflow Snowflake provider (`apache-airflow-providers-snowflake`) and built‑in sensors/operators. 
+> While async-capable sensors are not currently available in the official provider, keep an eye on its release notes for future support.
+> Thanks for being part of the project journey!
+
 # Apache Airflow Provider for Snowpark
 
 This provider from Astronomer extends the capabilities of the base [Snowflake Airflow Provider](https://github.com/apache/airflow/tree/main/airflow/providers/snowflake) with additional components to interact with [Snowpark](https://docs.snowflake.com/en/developer-guide/snowpark/index).
